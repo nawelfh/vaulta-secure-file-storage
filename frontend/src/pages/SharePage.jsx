@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiFetch } from '../api/client.js';
 import { Logo } from '../components/Logo.jsx';
@@ -16,7 +16,7 @@ export function SharePage() {
   const [status, setStatus] = useState('loading');
   const [downloading, setDownloading] = useState(false);
 
-  const loadShare = useCallback(async () => {
+  async function loadShare() {
     setStatus('loading');
     try {
       const data = await apiFetch(`/api/public/${shareToken}`);
@@ -26,11 +26,30 @@ export function SharePage() {
       setShare(null);
       setStatus(isUnavailableError(error) ? 'unavailable' : 'error');
     }
-  }, [shareToken]);
+  }
 
   useEffect(() => {
-    loadShare();
-  }, [loadShare]);
+    let cancelled = false;
+
+    async function checkShare() {
+      try {
+        const data = await apiFetch(`/api/public/${shareToken}`);
+        if (cancelled) return;
+        setShare(data);
+        setStatus('ready');
+      } catch (error) {
+        if (cancelled) return;
+        setShare(null);
+        setStatus(isUnavailableError(error) ? 'unavailable' : 'error');
+      }
+    }
+
+    void checkShare();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shareToken]);
 
   async function downloadFile() {
     setDownloading(true);
