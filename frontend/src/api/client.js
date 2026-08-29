@@ -43,5 +43,3 @@ export async function apiFetch(path, options = {}) {
   }
   return data;
 }
-
-export const publicDownloadUrl = (shareToken) => `${API_BASE_URL}/api/public/${shareToken}`;

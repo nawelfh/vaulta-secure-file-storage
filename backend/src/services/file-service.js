@@ -27,6 +27,15 @@ function publicFile(file, appOrigin) {
   };
 }
 
+function publicShare(file, downloadExpiresIn) {
+  return {
+    originalName: file.originalName,
+    mimeType: file.mimeType,
+    sizeBytes: file.sizeBytes,
+    downloadExpiresIn,
+  };
+}
+
 export function createFileService({ files, storage, config }) {
   async function validateCompletedObject(file) {
     const metadata = await storage.head(file.storageKey);
@@ -159,13 +168,21 @@ export function createFileService({ files, storage, config }) {
       };
     },
 
+    async getPublicInfo(shareToken) {
+      const file = requireFile(await files.findPublic(shareToken));
+      return publicShare(file, storage.signedUrlTtlSeconds);
+    },
+
     async getPublicDownload(shareToken) {
       const file = requireFile(await files.findPublic(shareToken));
-      return storage.signDownload({
-        key: file.storageKey,
-        fileName: file.originalName,
-        mimeType: file.mimeType,
-      });
+      return {
+        url: await storage.signDownload({
+          key: file.storageKey,
+          fileName: file.originalName,
+          mimeType: file.mimeType,
+        }),
+        expiresIn: storage.signedUrlTtlSeconds,
+      };
     },
 
     async delete({ ownerId, fileId }) {

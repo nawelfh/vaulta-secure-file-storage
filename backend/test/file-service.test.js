@@ -156,11 +156,27 @@ describe('file service authorization and lifecycle', () => {
     expect(shared.shareUrl).toMatch(/^https:\/\/vaulta\.example\/share\/[A-Za-z0-9_-]{43}$/);
     expect(shared.shareUrl).not.toContain(harness.records.get(file.id).storageKey);
 
-    const download = await harness.service.getPublicDownload(harness.records.get(file.id).shareToken);
-    expect(download).toBe('https://storage.example/download');
+    const shareToken = harness.records.get(file.id).shareToken;
+    const info = await harness.service.getPublicInfo(shareToken);
+    expect(info).toEqual({
+      originalName: 'report.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 15,
+      downloadExpiresIn: 300,
+    });
+
+    const download = await harness.service.getPublicDownload(shareToken);
+    expect(download).toEqual({
+      url: 'https://storage.example/download',
+      expiresIn: 300,
+    });
 
     const privateAgain = await harness.service.setVisibility({ ownerId: 'user-a', fileId: file.id, visibility: 'PRIVATE' });
     expect(privateAgain.shareUrl).toBeNull();
+    await expect(harness.service.getPublicInfo(shareToken))
+      .rejects.toMatchObject({ status: 404, code: 'FILE_NOT_FOUND' });
+    await expect(harness.service.getPublicDownload(shareToken))
+      .rejects.toMatchObject({ status: 404, code: 'FILE_NOT_FOUND' });
   });
 
   it('lists only owned records and issues owner downloads', async () => {

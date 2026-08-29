@@ -28,7 +28,16 @@ function testApp() {
     setVisibility: vi.fn(),
     getOwnerDownload: vi.fn(),
     delete: vi.fn(),
-    getPublicDownload: vi.fn(async () => 'https://storage.example/signed'),
+    getPublicInfo: vi.fn(async () => ({
+      originalName: 'report.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 1234,
+      downloadExpiresIn: 300,
+    })),
+    getPublicDownload: vi.fn(async () => ({
+      url: 'https://storage.example/signed',
+      expiresIn: 300,
+    })),
   };
   const pool = { query: vi.fn(async () => ({ rows: [] })) };
   const logger = pino({ level: 'silent' });
@@ -70,12 +79,27 @@ describe('HTTP security boundaries', () => {
     expect(wrong.status).toBe(403);
   });
 
-  it('allows public links without a session and redirects to a short-lived URL', async () => {
-    const { app } = testApp();
+  it('allows public links without a session and keeps storage URLs behind an explicit download request', async () => {
+    const { app, fileService } = testApp();
     const token = 'a'.repeat(43);
-    const response = await request(app).get(`/api/public/${token}`);
-    expect(response.status).toBe(302);
-    expect(response.headers.location).toBe('https://storage.example/signed');
+
+    const info = await request(app).get(`/api/public/${token}`);
+    expect(info.status).toBe(200);
+    expect(info.body).toEqual({
+      originalName: 'report.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 1234,
+      downloadExpiresIn: 300,
+    });
+    expect(fileService.getPublicInfo).toHaveBeenCalledWith(token);
+
+    const download = await request(app).get(`/api/public/${token}/download`);
+    expect(download.status).toBe(200);
+    expect(download.body).toEqual({
+      url: 'https://storage.example/signed',
+      expiresIn: 300,
+    });
+    expect(fileService.getPublicDownload).toHaveBeenCalledWith(token);
   });
 
   it('returns structured validation errors and hides unknown routes', async () => {
