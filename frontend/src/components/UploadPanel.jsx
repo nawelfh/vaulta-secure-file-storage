@@ -2,28 +2,42 @@ import { useEffect, useRef, useState } from 'react';
 import { UPLOAD_ERROR_KINDS, uploadFile } from '../api/uploads.js';
 import {
   FILE_INPUT_ACCEPT,
+  filePresentation,
   MAX_FILE_SIZE_BYTES,
   policyForFile,
   SUPPORTED_FORMAT_GUIDANCE,
 } from '../utils/file-policy.js';
 import { formatBytes } from '../utils/format.js';
 
+const FILE_UPLOAD_CONCURRENCY = 2;
 const ACTIVE_PHASES = new Set(['preparing', 'uploading', 'verifying']);
+const REMOVABLE_STATUSES = new Set(['waiting', 'failed', 'cancelled', 'complete']);
+let fallbackQueueId = 0;
+
+function createQueueId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  fallbackQueueId += 1;
+  return `upload-${Date.now()}-${fallbackQueueId}`;
+}
+
+// Queue-local duplicate protection only: metadata identity is not a content hash.
+function fileIdentity(file) {
+  return `${file.name}\u0000${file.size}\u0000${file.type}\u0000${file.lastModified}`;
+}
 
 function validate(file) {
-  if (!file) return 'Choose a file first.';
   if (!policyForFile(file)) return 'The file extension and type must match a supported format.';
   if (file.size <= 0 || file.size > MAX_FILE_SIZE_BYTES) return 'The file must be 250 MiB or smaller.';
   return null;
 }
 
 function uploadFailure(error) {
-  const reference = error?.requestId;
+  const requestId = error?.requestId;
   switch (error?.kind) {
     case UPLOAD_ERROR_KINDS.API_INITIATION:
-      return { message: 'Vaulta could not prepare this upload. Please try again.', reference };
+      return { message: 'Vaulta could not prepare this upload. Please try again.', requestId };
     case UPLOAD_ERROR_KINDS.PART_AUTHORIZATION:
-      return { message: 'Vaulta could not authorize the file transfer. Please try again.', reference };
+      return { message: 'Vaulta could not authorize the file transfer. Please try again.', requestId };
     case UPLOAD_ERROR_KINDS.STORAGE_NETWORK:
       return { message: 'The upload could not reach file storage. Check your connection and try again.' };
     case UPLOAD_ERROR_KINDS.STORAGE_REJECTED:
@@ -32,144 +46,301 @@ function uploadFailure(error) {
       return { message: 'File storage returned an incomplete response. Please try again.' };
     case UPLOAD_ERROR_KINDS.FINALIZATION:
       if (error.code === 'FILE_CONTENT_MISMATCH') {
-        return { message: 'Vaulta could not verify this file because its contents do not match its file type.', reference };
+        return { message: 'Vaulta could not verify this file because its contents do not match its file type.', requestId };
       }
       if (error.code === 'FILE_SIZE_MISMATCH') {
-        return { message: 'Vaulta could not verify this file because its uploaded size changed.', reference };
+        return { message: 'Vaulta could not verify this file because its uploaded size changed.', requestId };
       }
-      return { message: 'Vaulta could not verify and finalize this upload. Please try again.', reference };
+      return { message: 'Vaulta could not verify and finalize this upload. Please try again.', requestId };
     default:
-      return { message: 'The upload could not be completed. Please try again.', reference };
+      return { message: 'The upload could not be completed. Please try again.', requestId };
   }
 }
 
-function phaseMessage(phase, progress) {
-  switch (phase) {
-    case 'selected':
-      return { title: 'Ready to upload', detail: 'Review the file, then press Upload securely.' };
+function statusCopy(item) {
+  switch (item.status) {
+    case 'waiting':
+      return 'Waiting';
     case 'preparing':
-      return { title: 'Preparing upload', detail: 'Vaulta is creating a secure file transfer.' };
+      return 'Preparing upload';
     case 'uploading':
-      return { title: `Uploading securely — ${progress}%`, detail: 'File bytes are being transferred to storage.' };
+      return `Uploading — ${item.progress}%`;
     case 'verifying':
-      return { title: 'Upload transferred', detail: 'Vaulta is finalizing and verifying the file.' };
+      return 'Verifying upload';
     case 'complete':
-      return { title: 'Upload complete', detail: 'The file is ready in your vault.' };
+      return 'Complete';
+    case 'failed':
+      return item.validationFailure ? 'File not supported' : 'Upload failed';
     case 'cancelled':
-      return { title: 'Upload cancelled', detail: 'The selected file is still ready if you want to try again.' };
+      return 'Cancelled';
     default:
-      return null;
+      return item.status;
   }
+}
+
+function QueueItem({ item, onCancel, onRemove, onRetry }) {
+  const active = ACTIVE_PHASES.has(item.status);
+  const policy = policyForFile(item.file);
+  const presentation = item.validationFailure
+    ? { badge: 'FILE', style: 'generic' }
+    : filePresentation(item.file.type);
+
+  return (
+    <article className={`upload-queue-item queue-${item.status}`} data-upload-id={item.id}>
+      <span className={`file-icon file-${presentation.style}`} aria-hidden="true">{presentation.badge}</span>
+      <div className="queue-file-details">
+        <strong title={item.file.name}>{item.file.name}</strong>
+        <span>{policy?.label || item.file.type || 'Unsupported file type'} · {formatBytes(item.file.size)}</span>
+      </div>
+      <div className="queue-status" role="status" aria-live="polite">
+        <strong>{statusCopy(item)}</strong>
+        {item.status === 'verifying' && <span>Transfer complete; final checks continue.</span>}
+      </div>
+
+      {(item.status === 'uploading' || item.status === 'verifying') && (
+        <div
+          className="queue-progress"
+          role="progressbar"
+          aria-label={`Upload progress for ${item.file.name}`}
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow={item.progress}
+        >
+          <span style={{ width: `${item.progress}%` }} />
+        </div>
+      )}
+
+      {item.error && (
+        <div className="queue-error" role="alert">
+          <span>{item.error.message}</span>
+          {item.error.requestId && <small>Reference: {item.error.requestId}</small>}
+        </div>
+      )}
+
+      <div className="queue-item-actions">
+        {active && (
+          <button type="button" className="action-button danger-text" onClick={() => onCancel(item.id)}>
+            Cancel
+          </button>
+        )}
+        {!item.validationFailure && (item.status === 'failed' || item.status === 'cancelled') && (
+          <button type="button" className="action-button" onClick={() => onRetry(item.id)}>
+            Retry
+          </button>
+        )}
+        {REMOVABLE_STATUSES.has(item.status) && (
+          <button type="button" className="action-button" onClick={() => onRemove(item.id)}>
+            Remove
+          </button>
+        )}
+      </div>
+    </article>
+  );
 }
 
 export function UploadPanel({ onUploaded }) {
   const inputRef = useRef(null);
-  const abortRef = useRef(null);
-  const activeUploadRef = useRef(false);
-  const [selected, setSelected] = useState(null);
-  const [progress, setProgress] = useState(0);
-  const [phase, setPhase] = useState('idle');
+  const itemsRef = useRef([]);
+  const pendingRef = useRef([]);
+  const runningRef = useRef(new Set());
+  const controllersRef = useRef(new Map());
+  const mountedRef = useRef(true);
+  const onUploadedRef = useRef(onUploaded);
+  const [items, setItems] = useState([]);
   const [dragging, setDragging] = useState(false);
-  const [error, setError] = useState(null);
+  const [queueRunning, setQueueRunning] = useState(false);
 
-  const active = ACTIVE_PHASES.has(phase);
+  useEffect(() => {
+    onUploadedRef.current = onUploaded;
+  }, [onUploaded]);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => {
+    const controllers = controllersRef.current;
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      pendingRef.current = [];
+      for (const controller of controllers.values()) controller.abort();
+      controllers.clear();
+    };
+  }, []);
 
-  function choose(file) {
-    const validationError = validate(file);
-    setError(validationError ? { message: validationError, kind: 'validation' } : null);
-    setSelected(validationError ? null : file);
-    setProgress(0);
-    setPhase(validationError ? 'failed' : 'selected');
+  function replaceItems(updater) {
+    const next = updater(itemsRef.current);
+    itemsRef.current = next;
+    if (mountedRef.current) setItems(next);
   }
 
-  function openChooser() {
-    if (active || !inputRef.current) return;
-    inputRef.current.value = '';
-    inputRef.current.click();
+  function patchItem(id, patch) {
+    replaceItems((current) => current.map((item) => (
+      item.id === id ? { ...item, ...patch } : item
+    )));
   }
 
-  async function startUpload() {
-    if (!selected || activeUploadRef.current) return;
-    activeUploadRef.current = true;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setPhase('preparing');
-    setError(null);
-    setProgress(0);
-    try {
-      const file = await uploadFile(selected, {
-        signal: controller.signal,
-        onPhase: setPhase,
-        onProgress: (loaded) => {
-          const percentage = Math.round((loaded / selected.size) * 100);
-          setProgress(Math.min(100, Math.max(0, percentage)));
-        },
-      });
-      setSelected(null);
-      setProgress(100);
-      setPhase('complete');
-      if (inputRef.current) inputRef.current.value = '';
-      onUploaded(file);
-    } catch (uploadError) {
-      if (uploadError.name === 'AbortError') {
-        setPhase('cancelled');
-        setError(null);
-      } else {
-        setPhase('failed');
-        setError(uploadFailure(uploadError));
+  function addFiles(fileList) {
+    const incoming = Array.from(fileList || []);
+    if (incoming.length === 0) return;
+
+    replaceItems((current) => {
+      const identities = new Set(current.map((item) => fileIdentity(item.file)));
+      const additions = [];
+      for (const file of incoming) {
+        const identity = fileIdentity(file);
+        if (identities.has(identity)) continue;
+        identities.add(identity);
+        const validationError = validate(file);
+        additions.push({
+          id: createQueueId(),
+          file,
+          status: validationError ? 'failed' : 'waiting',
+          progress: 0,
+          error: validationError ? { message: validationError } : null,
+          requestId: null,
+          backendFileId: null,
+          validationFailure: Boolean(validationError),
+        });
       }
-    } finally {
-      abortRef.current = null;
-      activeUploadRef.current = false;
+      return additions.length ? [...current, ...additions] : current;
+    });
+  }
+
+  function scheduleQueue() {
+    if (!mountedRef.current) return;
+    while (runningRef.current.size < FILE_UPLOAD_CONCURRENCY && pendingRef.current.length > 0) {
+      const id = pendingRef.current.shift();
+      const item = itemsRef.current.find((candidate) => candidate.id === id);
+      if (!item || item.status !== 'waiting' || runningRef.current.has(id)) continue;
+      runningRef.current.add(id);
+      void runItem(item);
+    }
+    if (runningRef.current.size === 0 && pendingRef.current.length === 0) {
+      setQueueRunning(false);
     }
   }
 
-  const lifecycle = phaseMessage(phase, progress);
-  const selectedPolicy = policyForFile(selected);
+  function enqueue(ids) {
+    const pending = new Set(pendingRef.current);
+    let added = false;
+    for (const id of ids) {
+      if (pending.has(id) || runningRef.current.has(id)) continue;
+      const item = itemsRef.current.find((candidate) => candidate.id === id);
+      if (!item || item.status !== 'waiting') continue;
+      pendingRef.current.push(id);
+      pending.add(id);
+      added = true;
+    }
+    if (!added) return;
+    setQueueRunning(true);
+    scheduleQueue();
+  }
+
+  async function runItem(item) {
+    const controller = new AbortController();
+    controllersRef.current.set(item.id, controller);
+    patchItem(item.id, { status: 'preparing', progress: 0, error: null, requestId: null });
+    try {
+      const completed = await uploadFile(item.file, {
+        signal: controller.signal,
+        onPhase: (status) => {
+          if (mountedRef.current && ACTIVE_PHASES.has(status)) patchItem(item.id, { status });
+        },
+        onProgress: (loaded) => {
+          if (!mountedRef.current) return;
+          const percentage = Math.round((loaded / item.file.size) * 100);
+          patchItem(item.id, { progress: Math.min(100, Math.max(0, percentage)) });
+        },
+      });
+      if (!mountedRef.current) return;
+      patchItem(item.id, {
+        status: 'complete',
+        progress: 100,
+        backendFileId: completed.id,
+        error: null,
+        requestId: null,
+      });
+      onUploadedRef.current?.(completed);
+    } catch (error) {
+      if (!mountedRef.current) return;
+      if (error.name === 'AbortError') {
+        patchItem(item.id, { status: 'cancelled', error: null, requestId: null });
+      } else {
+        const failure = uploadFailure(error);
+        patchItem(item.id, {
+          status: 'failed',
+          error: failure,
+          requestId: failure.requestId || null,
+        });
+      }
+    } finally {
+      controllersRef.current.delete(item.id);
+      runningRef.current.delete(item.id);
+      if (mountedRef.current) scheduleQueue();
+    }
+  }
+
+  function uploadAll() {
+    enqueue(itemsRef.current.filter((item) => item.status === 'waiting').map((item) => item.id));
+  }
+
+  function retry(id) {
+    const item = itemsRef.current.find((candidate) => candidate.id === id);
+    if (!item || item.validationFailure || !['failed', 'cancelled'].includes(item.status)) return;
+    patchItem(id, { status: 'waiting', progress: 0, error: null, requestId: null });
+    enqueue([id]);
+  }
+
+  function cancel(id) {
+    controllersRef.current.get(id)?.abort();
+  }
+
+  function remove(id) {
+    const item = itemsRef.current.find((candidate) => candidate.id === id);
+    if (!item || !REMOVABLE_STATUSES.has(item.status)) return;
+    pendingRef.current = pendingRef.current.filter((pendingId) => pendingId !== id);
+    replaceItems((current) => current.filter((candidate) => candidate.id !== id));
+    scheduleQueue();
+  }
+
+  const waitingCount = items.filter((item) => item.status === 'waiting').length;
+  const completeCount = items.filter((item) => item.status === 'complete').length;
+  const activeCount = items.filter((item) => ACTIVE_PHASES.has(item.status)).length;
 
   return (
     <section className="upload-card" aria-labelledby="upload-heading">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">New upload</p>
-          <h2 id="upload-heading">Add a file to your vault</h2>
+          <p className="eyebrow">New uploads</p>
+          <h2 id="upload-heading">Add files to your vault</h2>
         </div>
         <span className="security-note">Private by default</span>
       </div>
 
       <div
         className={`drop-zone${dragging ? ' is-dragging' : ''}`}
-        onDragEnter={(event) => {
-          event.preventDefault();
-          if (!active) setDragging(true);
-        }}
+        onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
         onDragOver={(event) => event.preventDefault()}
         onDragLeave={() => setDragging(false)}
         onDrop={(event) => {
           event.preventDefault();
           setDragging(false);
-          if (active) return;
-          choose(event.dataTransfer.files[0]);
+          addFiles(event.dataTransfer.files);
         }}
       >
         <span className="upload-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" /></svg>
         </span>
         <div>
-          <strong>{selected ? selected.name : 'Drop a file here'}</strong>
-          <p>
-            {selected
-              ? `${selectedPolicy.label} · ${formatBytes(selected.size)}`
-              : SUPPORTED_FORMAT_GUIDANCE}
-          </p>
+          <strong>Drop one or more files here</strong>
+          <p>{SUPPORTED_FORMAT_GUIDANCE}</p>
         </div>
         <button
           className="button button-secondary file-button"
           type="button"
-          disabled={active}
-          onClick={openChooser}
+          onClick={() => {
+            if (!inputRef.current) return;
+            inputRef.current.value = '';
+            inputRef.current.click();
+          }}
         >
           Browse files
         </button>
@@ -178,56 +349,47 @@ export function UploadPanel({ onUploaded }) {
           className="file-input"
           type="file"
           accept={FILE_INPUT_ACCEPT}
-          disabled={active}
+          multiple
           tabIndex={-1}
-          aria-label="Choose one file to upload"
+          aria-label="Choose one or more files to upload"
           onChange={(event) => {
-            const file = event.target.files[0];
-            choose(file);
+            addFiles(event.target.files);
             event.target.value = '';
           }}
         />
       </div>
 
-      {lifecycle && (
-        <div className={`upload-lifecycle phase-${phase}`} role="status" aria-live="polite">
-          <strong>{lifecycle.title}</strong>
-          <p>{lifecycle.detail}</p>
-        </div>
-      )}
-      {(phase === 'uploading' || phase === 'verifying') && (
-        <div className="progress-row" aria-live="polite">
-          <div className="progress-meta">
-            <span>{phase === 'uploading' ? 'Uploading securely…' : 'Transfer complete; verification continues…'}</span>
-            <strong>{progress}%</strong>
+      {items.length > 0 && (
+        <div className="upload-queue" aria-label="Files selected for upload">
+          <div className="queue-summary" role="status" aria-live="polite">
+            <span>{items.length} {items.length === 1 ? 'file' : 'files'} in queue</span>
+            <span>{completeCount} complete{activeCount ? ` · ${activeCount} active` : ''}</span>
           </div>
-          <div
-            className="progress-track"
-            role="progressbar"
-            aria-label="File upload progress"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            aria-valuenow={progress}
-          >
-            <span style={{ width: `${progress}%` }} />
-          </div>
+          {items.map((item) => (
+            <QueueItem
+              key={item.id}
+              item={item}
+              onCancel={cancel}
+              onRemove={remove}
+              onRetry={retry}
+            />
+          ))}
         </div>
       )}
-      {error && (
-        <div className="form-error" role="alert">
-          <span>{error.message}</span>
-          {error.reference && <small>Reference: {error.reference}</small>}
-        </div>
-      )}
+
       <div className="upload-actions">
-        {!selected && !active && phase !== 'complete' && (
-          <p className="upload-hint">Choose a supported file before uploading.</p>
+        {items.length === 0 && <p className="upload-hint">Choose one or more supported files to begin.</p>}
+        {items.length > 0 && waitingCount === 0 && !queueRunning && (
+          <p className="upload-hint">Add more files, retry an item, or remove completed entries.</p>
         )}
-        {active ? (
-          <button className="button button-ghost danger-text" type="button" onClick={() => abortRef.current?.abort()}>Cancel upload</button>
-        ) : (
-          <button className="button button-primary" type="button" disabled={!selected} onClick={startUpload}>Upload securely</button>
-        )}
+        <button
+          className="button button-primary"
+          type="button"
+          disabled={waitingCount === 0 || queueRunning}
+          onClick={uploadAll}
+        >
+          {queueRunning ? 'Upload queue running…' : 'Upload all'}
+        </button>
       </div>
     </section>
   );
