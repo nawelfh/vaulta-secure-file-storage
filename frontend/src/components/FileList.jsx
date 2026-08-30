@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../api/client.js';
+import { filePresentation } from '../utils/file-policy.js';
 import { formatBytes, formatDate } from '../utils/format.js';
 
-function FileIcon({ mimeType }) {
-  const label = mimeType === 'application/pdf' ? 'PDF'
-    : mimeType === 'application/zip' ? 'ZIP'
-      : mimeType.startsWith('image/') ? 'IMG' : 'TXT';
-  return <span className={`file-icon file-${label.toLowerCase()}`}>{label}</span>;
+export function FileIcon({ mimeType }) {
+  const presentation = filePresentation(mimeType);
+  return <span className={`file-icon file-${presentation.style}`}>{presentation.badge}</span>;
 }
 
 export function FileList({ files, onChange, onDelete, loading }) {

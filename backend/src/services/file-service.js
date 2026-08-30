@@ -3,6 +3,7 @@ import { ApiError } from '../utils/api-error.js';
 import { randomToken } from '../utils/crypto.js';
 import {
   expectedPartCount,
+  FILE_SIGNATURE_PREFIX_BYTES,
   matchesDeclaredType,
   validateFileMetadata,
 } from '../utils/file-validation.js';
@@ -45,7 +46,7 @@ export function createFileService({ files, storage, config }) {
       throw new ApiError(422, 'FILE_SIZE_MISMATCH', 'The uploaded object size does not match the request.');
     }
 
-    const prefix = await storage.readPrefix(file.storageKey);
+    const prefix = await storage.readPrefix(file.storageKey, FILE_SIGNATURE_PREFIX_BYTES);
     if (!matchesDeclaredType(file.mimeType, prefix)) {
       await storage.delete(file.storageKey);
       await files.markRejected({ id: file.id, ownerId: file.ownerId, reason: 'CONTENT_TYPE_MISMATCH' });

@@ -73,14 +73,16 @@ describe('UploadPanel file selection', () => {
   });
 
   it('shows validation feedback and resets after repeated selection of the same invalid file', () => {
-    const invalid = validFile('clip.mp4', 'video/mp4');
+    const invalid = validFile('clip.exe', 'video/mp4');
     const input = choose(invalid);
 
-    expect(container.querySelector('[role="alert"]').textContent).toContain('Use a PDF, PNG, JPEG, TXT, or ZIP file.');
+    expect(container.querySelector('[role="alert"]').textContent)
+      .toContain('The file extension and type must match a supported format.');
     expect(input.value).toBe('');
 
     choose(invalid);
-    expect(container.querySelector('[role="alert"]').textContent).toContain('Use a PDF, PNG, JPEG, TXT, or ZIP file.');
+    expect(container.querySelector('[role="alert"]').textContent)
+      .toContain('The file extension and type must match a supported format.');
     expect(button('Upload securely').disabled).toBe(true);
   });
 
@@ -89,6 +91,11 @@ describe('UploadPanel file selection', () => {
     ['picture.png', 'image/png'],
     ['picture.jpg', 'image/jpeg'],
     ['picture.jpeg', 'image/jpeg'],
+    ['animation.gif', 'image/gif'],
+    ['picture.webp', 'image/webp'],
+    ['clip.mp4', 'video/mp4'],
+    ['clip.webm', 'video/webm'],
+    ['clip.mov', 'video/quicktime'],
     ['notes.txt', 'text/plain'],
     ['bundle.zip', 'application/zip'],
   ])('keeps %s accepted', (name, type) => {
@@ -97,14 +104,36 @@ describe('UploadPanel file selection', () => {
   });
 
   it.each([
-    ['animation.gif', 'image/gif'],
-    ['picture.webp', 'image/webp'],
-    ['clip.mp4', 'video/mp4'],
+    ['animation.png', 'image/gif'],
+    ['picture.webp', 'image/jpeg'],
+    ['clip.exe', 'video/mp4'],
+    ['clip.mp4', 'application/octet-stream'],
+    ['clip.avi', 'video/x-msvideo'],
     ['page.html', 'text/html'],
   ])('keeps %s rejected', (name, type) => {
     choose(validFile(name, type));
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
     expect(button('Upload securely').disabled).toBe(true);
+  });
+
+  it('shows accurate supported-format guidance', () => {
+    expect(container.textContent)
+      .toContain('JPG, PNG, GIF, WebP, MP4, WebM, MOV, PDF, TXT or ZIP · up to 250 MiB');
+    const accept = container.querySelector('input[type="file"]').getAttribute('accept');
+    expect(accept).toContain('.gif');
+    expect(accept).toContain('.webp');
+    expect(accept).toContain('.mp4');
+    expect(accept).toContain('.webm');
+    expect(accept).toContain('.mov');
+  });
+
+  it('shows selected video information', () => {
+    choose(validFile('camera-video.mp4', 'video/mp4', '1234567890'));
+
+    expect(container.textContent).toContain('camera-video.mp4');
+    expect(container.textContent).toContain('MP4 video');
+    expect(container.textContent).toContain('10 B');
+    expect(container.textContent).toContain('Ready to upload');
   });
 });
 
@@ -112,12 +141,12 @@ describe('UploadPanel lifecycle and errors', () => {
   it('shows preparing, real progress, verification, and completion in order', async () => {
     let controls;
     let finish;
-    const uploaded = { id: 'file-1', originalName: 'report.pdf' };
+    const uploaded = { id: 'file-1', originalName: 'camera-video.mp4' };
     uploadFile.mockImplementation((_file, options) => {
       controls = options;
       return new Promise((resolve) => { finish = resolve; });
     });
-    choose(validFile('report.pdf', 'application/pdf', '1234567890'));
+    choose(validFile('camera-video.mp4', 'video/mp4', '1234567890'));
 
     act(() => button('Upload securely').click());
     expect(container.textContent).toContain('Preparing upload');

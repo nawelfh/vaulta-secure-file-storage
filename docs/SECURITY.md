@@ -23,8 +23,10 @@ The application protects account credentials, session secrets, private file byte
 
 ### Upload handling
 
-- Allowed types are PDF, PNG, JPEG, plain text, and ZIP.
+- Allowed types are PDF, PNG, JPEG, GIF, WebP, MP4, WebM, QuickTime MOV, plain text, and ZIP.
 - File name, extension, declared MIME, integer size, and configured maximum are checked by the API.
+- Completion reads at most the first 4096 object bytes. GIF requires `GIF87a` or `GIF89a`; WebP requires both `RIFF` and `WEBP` markers at their defined offsets; WebM requires a bounded EBML header containing the exact `webm` DocType.
+- MP4 and MOV require a structurally valid top-level ISO-BMFF `ftyp` box within that prefix. MP4 requires at least one of these major or compatible brands: `isom`, `iso2`–`iso9`, `mp41`, `mp42`, `mp71`, `avc1`, `M4V `, `M4VH`, `M4VP`, `F4V `, `MSNV`, `dash`, `cmfc`, or `cmfs`. MOV requires the QuickTime `qt  ` brand. Malformed, oversized-prefix, truncated, unbranded, or MIME/extension-mismatched media is rejected.
 - Storage keys are generated and contain no user filename.
 - The bucket is private and file bytes bypass Express via presigned multipart part requests.
 - Part numbers must be unique and within the calculated range; completion requires one consecutive entry for every part.

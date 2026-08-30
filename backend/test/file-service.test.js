@@ -127,6 +127,7 @@ describe('file service authorization and lifecycle', () => {
       parts: [{ partNumber: 2, etag: 'etag-2' }, { partNumber: 1, etag: 'etag-1' }],
     });
     expect(completed.status).toBe('READY');
+    expect(harness.storage.readPrefix).toHaveBeenCalledWith(expect.any(String), 4096);
     expect(harness.storage.completeMultipart).toHaveBeenCalledWith(expect.objectContaining({
       parts: [{ partNumber: 1, etag: 'etag-1' }, { partNumber: 2, etag: 'etag-2' }],
     }));

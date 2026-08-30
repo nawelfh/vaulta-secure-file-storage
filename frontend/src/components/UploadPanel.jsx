@@ -1,23 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { UPLOAD_ERROR_KINDS, uploadFile } from '../api/uploads.js';
+import {
+  FILE_INPUT_ACCEPT,
+  MAX_FILE_SIZE_BYTES,
+  policyForFile,
+  SUPPORTED_FORMAT_GUIDANCE,
+} from '../utils/file-policy.js';
 import { formatBytes } from '../utils/format.js';
-
-const MAX_BYTES = 250 * 1024 * 1024;
-const ALLOWED_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg', 'text/plain', 'application/zip']);
-const TYPE_LABELS = {
-  'application/pdf': 'PDF document',
-  'image/png': 'PNG image',
-  'image/jpeg': 'JPEG image',
-  'text/plain': 'Text document',
-  'application/zip': 'ZIP archive',
-};
 
 const ACTIVE_PHASES = new Set(['preparing', 'uploading', 'verifying']);
 
 function validate(file) {
   if (!file) return 'Choose a file first.';
-  if (!ALLOWED_TYPES.has(file.type)) return 'Use a PDF, PNG, JPEG, TXT, or ZIP file.';
-  if (file.size <= 0 || file.size > MAX_BYTES) return 'The file must be 250 MiB or smaller.';
+  if (!policyForFile(file)) return 'The file extension and type must match a supported format.';
+  if (file.size <= 0 || file.size > MAX_FILE_SIZE_BYTES) return 'The file must be 250 MiB or smaller.';
   return null;
 }
 
@@ -131,6 +127,7 @@ export function UploadPanel({ onUploaded }) {
   }
 
   const lifecycle = phaseMessage(phase, progress);
+  const selectedPolicy = policyForFile(selected);
 
   return (
     <section className="upload-card" aria-labelledby="upload-heading">
@@ -164,8 +161,8 @@ export function UploadPanel({ onUploaded }) {
           <strong>{selected ? selected.name : 'Drop a file here'}</strong>
           <p>
             {selected
-              ? `${TYPE_LABELS[selected.type]} · ${formatBytes(selected.size)}`
-              : 'PDF, PNG, JPEG, TXT or ZIP · up to 250 MiB'}
+              ? `${selectedPolicy.label} · ${formatBytes(selected.size)}`
+              : SUPPORTED_FORMAT_GUIDANCE}
           </p>
         </div>
         <button
@@ -180,7 +177,7 @@ export function UploadPanel({ onUploaded }) {
           ref={inputRef}
           className="file-input"
           type="file"
-          accept=".pdf,.png,.jpg,.jpeg,.txt,.zip"
+          accept={FILE_INPUT_ACCEPT}
           disabled={active}
           tabIndex={-1}
           aria-label="Choose one file to upload"

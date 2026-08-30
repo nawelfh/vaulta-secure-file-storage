@@ -705,6 +705,11 @@ h3,
   background: #e5edfa;
 }
 
+.file-video {
+  color: #26646b;
+  background: #def1f2;
+}
+
 .file-zip {
   color: #735097;
   background: #eee6f7;
