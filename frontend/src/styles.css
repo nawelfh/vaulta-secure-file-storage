@@ -548,21 +548,64 @@ h3,
 }
 
 .file-button {
-  position: relative;
-  overflow: hidden;
+  flex: 0 0 auto;
 }
 
-.file-button input {
+.file-input {
   position: absolute;
   width: 1px;
   height: 1px;
-  opacity: 0;
+  overflow: hidden;
+  margin: -1px;
+  border: 0;
+  padding: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .upload-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 16px;
   margin-top: 18px;
+}
+
+.upload-hint {
+  margin: 0 auto 0 0;
+  color: var(--muted);
+  font-size: .82rem;
+}
+
+.upload-lifecycle {
+  margin-top: 18px;
+  border-left: 3px solid var(--green);
+  border-radius: 7px;
+  padding: 10px 12px;
+  background: var(--green-pale);
+}
+
+.upload-lifecycle strong {
+  display: block;
+  font-size: .88rem;
+}
+
+.upload-lifecycle p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: .8rem;
+}
+
+.phase-cancelled {
+  border-left-color: #8b6e32;
+  background: #f7f1e5;
+}
+
+.form-error small {
+  display: block;
+  margin-top: 5px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 .progress-row {
@@ -997,6 +1040,15 @@ h3,
   }
 
   .file-button {
+    width: 100%;
+  }
+
+  .upload-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .upload-actions .button {
     width: 100%;
   }
 

@@ -1,55 +1,136 @@
-import { useRef, useState } from 'react';
-import { uploadFile } from '../api/uploads.js';
+import { useEffect, useRef, useState } from 'react';
+import { UPLOAD_ERROR_KINDS, uploadFile } from '../api/uploads.js';
 import { formatBytes } from '../utils/format.js';
 
 const MAX_BYTES = 250 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg', 'text/plain', 'application/zip']);
+const TYPE_LABELS = {
+  'application/pdf': 'PDF document',
+  'image/png': 'PNG image',
+  'image/jpeg': 'JPEG image',
+  'text/plain': 'Text document',
+  'application/zip': 'ZIP archive',
+};
+
+const ACTIVE_PHASES = new Set(['preparing', 'uploading', 'verifying']);
 
 function validate(file) {
   if (!file) return 'Choose a file first.';
   if (!ALLOWED_TYPES.has(file.type)) return 'Use a PDF, PNG, JPEG, TXT, or ZIP file.';
-  if (file.size <= 0 || file.size > MAX_BYTES) return 'The file must be smaller than 250 MB.';
+  if (file.size <= 0 || file.size > MAX_BYTES) return 'The file must be 250 MiB or smaller.';
   return null;
+}
+
+function uploadFailure(error) {
+  const reference = error?.requestId;
+  switch (error?.kind) {
+    case UPLOAD_ERROR_KINDS.API_INITIATION:
+      return { message: 'Vaulta could not prepare this upload. Please try again.', reference };
+    case UPLOAD_ERROR_KINDS.PART_AUTHORIZATION:
+      return { message: 'Vaulta could not authorize the file transfer. Please try again.', reference };
+    case UPLOAD_ERROR_KINDS.STORAGE_NETWORK:
+      return { message: 'The upload could not reach file storage. Check your connection and try again.' };
+    case UPLOAD_ERROR_KINDS.STORAGE_REJECTED:
+      return { message: 'File storage rejected part of the upload. Please try again.' };
+    case UPLOAD_ERROR_KINDS.MISSING_ETAG:
+      return { message: 'File storage returned an incomplete response. Please try again.' };
+    case UPLOAD_ERROR_KINDS.FINALIZATION:
+      if (error.code === 'FILE_CONTENT_MISMATCH') {
+        return { message: 'Vaulta could not verify this file because its contents do not match its file type.', reference };
+      }
+      if (error.code === 'FILE_SIZE_MISMATCH') {
+        return { message: 'Vaulta could not verify this file because its uploaded size changed.', reference };
+      }
+      return { message: 'Vaulta could not verify and finalize this upload. Please try again.', reference };
+    default:
+      return { message: 'The upload could not be completed. Please try again.', reference };
+  }
+}
+
+function phaseMessage(phase, progress) {
+  switch (phase) {
+    case 'selected':
+      return { title: 'Ready to upload', detail: 'Review the file, then press Upload securely.' };
+    case 'preparing':
+      return { title: 'Preparing upload', detail: 'Vaulta is creating a secure file transfer.' };
+    case 'uploading':
+      return { title: `Uploading securely — ${progress}%`, detail: 'File bytes are being transferred to storage.' };
+    case 'verifying':
+      return { title: 'Upload transferred', detail: 'Vaulta is finalizing and verifying the file.' };
+    case 'complete':
+      return { title: 'Upload complete', detail: 'The file is ready in your vault.' };
+    case 'cancelled':
+      return { title: 'Upload cancelled', detail: 'The selected file is still ready if you want to try again.' };
+    default:
+      return null;
+  }
 }
 
 export function UploadPanel({ onUploaded }) {
   const inputRef = useRef(null);
   const abortRef = useRef(null);
+  const activeUploadRef = useRef(false);
   const [selected, setSelected] = useState(null);
   const [progress, setProgress] = useState(0);
-  const [uploading, setUploading] = useState(false);
+  const [phase, setPhase] = useState('idle');
   const [dragging, setDragging] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
+
+  const active = ACTIVE_PHASES.has(phase);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   function choose(file) {
     const validationError = validate(file);
-    setError(validationError || '');
+    setError(validationError ? { message: validationError, kind: 'validation' } : null);
     setSelected(validationError ? null : file);
     setProgress(0);
+    setPhase(validationError ? 'failed' : 'selected');
+  }
+
+  function openChooser() {
+    if (active || !inputRef.current) return;
+    inputRef.current.value = '';
+    inputRef.current.click();
   }
 
   async function startUpload() {
-    if (!selected || uploading) return;
+    if (!selected || activeUploadRef.current) return;
+    activeUploadRef.current = true;
     const controller = new AbortController();
     abortRef.current = controller;
-    setUploading(true);
-    setError('');
+    setPhase('preparing');
+    setError(null);
+    setProgress(0);
     try {
       const file = await uploadFile(selected, {
         signal: controller.signal,
-        onProgress: (loaded) => setProgress(Math.round((loaded / selected.size) * 100)),
+        onPhase: setPhase,
+        onProgress: (loaded) => {
+          const percentage = Math.round((loaded / selected.size) * 100);
+          setProgress(Math.min(100, Math.max(0, percentage)));
+        },
       });
       setSelected(null);
-      setProgress(0);
+      setProgress(100);
+      setPhase('complete');
       if (inputRef.current) inputRef.current.value = '';
       onUploaded(file);
     } catch (uploadError) {
-      setError(uploadError.name === 'AbortError' ? 'Upload cancelled.' : uploadError.message);
+      if (uploadError.name === 'AbortError') {
+        setPhase('cancelled');
+        setError(null);
+      } else {
+        setPhase('failed');
+        setError(uploadFailure(uploadError));
+      }
     } finally {
       abortRef.current = null;
-      setUploading(false);
+      activeUploadRef.current = false;
     }
   }
+
+  const lifecycle = phaseMessage(phase, progress);
 
   return (
     <section className="upload-card" aria-labelledby="upload-heading">
@@ -63,12 +144,16 @@ export function UploadPanel({ onUploaded }) {
 
       <div
         className={`drop-zone${dragging ? ' is-dragging' : ''}`}
-        onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          if (!active) setDragging(true);
+        }}
         onDragOver={(event) => event.preventDefault()}
         onDragLeave={() => setDragging(false)}
         onDrop={(event) => {
           event.preventDefault();
           setDragging(false);
+          if (active) return;
           choose(event.dataTransfer.files[0]);
         }}
       >
@@ -77,29 +162,71 @@ export function UploadPanel({ onUploaded }) {
         </span>
         <div>
           <strong>{selected ? selected.name : 'Drop a file here'}</strong>
-          <p>{selected ? formatBytes(selected.size) : 'PDF, PNG, JPEG, TXT or ZIP · up to 250 MB'}</p>
+          <p>
+            {selected
+              ? `${TYPE_LABELS[selected.type]} · ${formatBytes(selected.size)}`
+              : 'PDF, PNG, JPEG, TXT or ZIP · up to 250 MiB'}
+          </p>
         </div>
-        <label className="button button-secondary file-button">
+        <button
+          className="button button-secondary file-button"
+          type="button"
+          disabled={active}
+          onClick={openChooser}
+        >
           Browse files
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".pdf,.png,.jpg,.jpeg,.txt,.zip"
-            disabled={uploading}
-            onChange={(event) => choose(event.target.files[0])}
-          />
-        </label>
+        </button>
+        <input
+          ref={inputRef}
+          className="file-input"
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg,.txt,.zip"
+          disabled={active}
+          tabIndex={-1}
+          aria-label="Choose one file to upload"
+          onChange={(event) => {
+            const file = event.target.files[0];
+            choose(file);
+            event.target.value = '';
+          }}
+        />
       </div>
 
-      {uploading && (
-        <div className="progress-row" aria-live="polite">
-          <div className="progress-meta"><span>Encrypting connection and uploading…</span><strong>{progress}%</strong></div>
-          <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
+      {lifecycle && (
+        <div className={`upload-lifecycle phase-${phase}`} role="status" aria-live="polite">
+          <strong>{lifecycle.title}</strong>
+          <p>{lifecycle.detail}</p>
         </div>
       )}
-      {error && <p className="form-error" role="alert">{error}</p>}
+      {(phase === 'uploading' || phase === 'verifying') && (
+        <div className="progress-row" aria-live="polite">
+          <div className="progress-meta">
+            <span>{phase === 'uploading' ? 'Uploading securely…' : 'Transfer complete; verification continues…'}</span>
+            <strong>{progress}%</strong>
+          </div>
+          <div
+            className="progress-track"
+            role="progressbar"
+            aria-label="File upload progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow={progress}
+          >
+            <span style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      )}
+      {error && (
+        <div className="form-error" role="alert">
+          <span>{error.message}</span>
+          {error.reference && <small>Reference: {error.reference}</small>}
+        </div>
+      )}
       <div className="upload-actions">
-        {uploading ? (
+        {!selected && !active && phase !== 'complete' && (
+          <p className="upload-hint">Choose a supported file before uploading.</p>
+        )}
+        {active ? (
           <button className="button button-ghost danger-text" type="button" onClick={() => abortRef.current?.abort()}>Cancel upload</button>
         ) : (
           <button className="button button-primary" type="button" disabled={!selected} onClick={startUpload}>Upload securely</button>

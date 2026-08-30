@@ -7,12 +7,13 @@ function readCookie(name) {
 }
 
 export class ApiClientError extends Error {
-  constructor(message, status, code, details) {
+  constructor(message, status, code, details, requestId) {
     super(message);
     this.name = 'ApiClientError';
     this.status = status;
     this.code = code;
     this.details = details;
+    this.requestId = requestId;
   }
 }
 
@@ -39,6 +40,7 @@ export async function apiFetch(path, options = {}) {
       response.status,
       data?.error?.code || 'REQUEST_FAILED',
       data?.error?.details,
+      data?.error?.requestId || response.headers.get('x-request-id') || undefined,
     );
   }
   return data;
