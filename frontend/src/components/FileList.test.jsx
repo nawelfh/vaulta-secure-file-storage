@@ -2,8 +2,8 @@
 
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { FileIcon } from './FileList.jsx';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FileIcon, FileList } from './FileList.jsx';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -41,5 +41,45 @@ describe('FileIcon media presentation', () => {
   it('never presents an unknown video type as text', () => {
     act(() => root.render(<FileIcon mimeType="video/example" />));
     expect(container.querySelector('.file-icon').textContent).toBe('VID');
+  });
+});
+
+describe('FileList dashboard totals and pagination', () => {
+  const file = {
+    id: 'file-1',
+    originalName: 'report.pdf',
+    mimeType: 'application/pdf',
+    sizeBytes: 1024,
+    status: 'READY',
+    visibility: 'PRIVATE',
+    createdAt: '2026-01-01T00:00:00Z',
+  };
+
+  it('labels the count from authoritative stats and exposes Load more', () => {
+    const onLoadMore = vi.fn();
+    act(() => root.render(
+      <FileList
+        files={[file]}
+        totalFiles={300}
+        nextCursor="cursor-50"
+        onLoadMore={onLoadMore}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    ));
+
+    expect(container.textContent).toContain('300 total');
+    const loadMore = [...container.querySelectorAll('button')]
+      .find((element) => element.textContent === 'Load more');
+    act(() => loadMore.click());
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls a non-authoritative count loaded when stats are unavailable', () => {
+    act(() => root.render(
+      <FileList files={[file]} onChange={vi.fn()} onDelete={vi.fn()} />,
+    ));
+    expect(container.textContent).toContain('1 loaded');
+    expect(container.textContent).not.toContain('1 total');
   });
 });

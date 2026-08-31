@@ -8,7 +8,18 @@ export function FileIcon({ mimeType }) {
   return <span className={`file-icon file-${presentation.style}`}>{presentation.badge}</span>;
 }
 
-export function FileList({ files, onChange, onDelete, loading }) {
+export function FileList({
+  files,
+  onChange,
+  onDelete,
+  loading,
+  error,
+  totalFiles,
+  nextCursor,
+  loadingMore,
+  onLoadMore,
+  onRetry,
+}) {
   const [busyId, setBusyId] = useState(null);
   const [notice, setNotice] = useState('');
   const [fileToDelete, setFileToDelete] = useState(null);
@@ -95,14 +106,32 @@ export function FileList({ files, onChange, onDelete, loading }) {
     <section className="files-section" aria-labelledby="files-heading">
       <div className="section-heading file-heading">
         <div>
-          <p className="eyebrow">Your storage</p>
-          <h2 id="files-heading">Files</h2>
+          <p className="eyebrow">File management</p>
+          <h2 id="files-heading">Your Files</h2>
+          <p>Review access, download securely, or manage sharing.</p>
         </div>
-        <span className="file-count">{files.length} {files.length === 1 ? 'file' : 'files'}</span>
+        <span className="file-count">
+          {Number.isSafeInteger(totalFiles)
+            ? `${totalFiles.toLocaleString()} total`
+            : `${files.length.toLocaleString()} loaded`}
+        </span>
       </div>
       {notice && <p className="inline-notice" role="status">{notice}</p>}
+      {error && files.length > 0 && (
+        <div className="inline-file-error" role="alert">
+          <span>{error}</span>
+          <button type="button" onClick={onRetry}>Retry</button>
+        </div>
+      )}
       {loading ? (
         <div className="empty-state"><span className="spinner" /><p>Loading your files…</p></div>
+      ) : error && files.length === 0 ? (
+        <div className="empty-state file-error-state">
+          <span className="empty-icon" aria-hidden="true">!</span>
+          <h3>Your files could not be loaded</h3>
+          <p role="alert">{error}</p>
+          <button type="button" className="button button-secondary" onClick={onRetry}>Retry</button>
+        </div>
       ) : files.length === 0 ? (
         <div className="empty-state">
           <span className="empty-icon" aria-hidden="true">◇</span>
@@ -111,6 +140,9 @@ export function FileList({ files, onChange, onDelete, loading }) {
         </div>
       ) : (
         <div className="file-list">
+          <div className="file-list-header" aria-hidden="true">
+            <span>File</span><span>Visibility</span><span>Actions</span>
+          </div>
           {files.map((file) => (
             <article className="file-row" key={file.id}>
               <FileIcon mimeType={file.mimeType} />
@@ -135,6 +167,19 @@ export function FileList({ files, onChange, onDelete, loading }) {
               </div>
             </article>
           ))}
+        </div>
+      )}
+      {nextCursor && !loading && (
+        <div className="file-pagination">
+          <span>{files.length.toLocaleString()} files loaded</span>
+          <button
+            type="button"
+            className="button button-secondary"
+            disabled={loadingMore}
+            onClick={onLoadMore}
+          >
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
         </div>
       )}
       <dialog
