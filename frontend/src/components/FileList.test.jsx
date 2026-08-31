@@ -69,6 +69,7 @@ describe('FileList professional table and pagination', () => {
     status: 'READY',
     visibility: 'PRIVATE',
     createdAt: '2026-01-01T00:00:00Z',
+    trashedAt: '2026-02-01T00:00:00Z',
   };
 
   const pagination = { page: 1, limit: 5, total: 27, totalPages: 6, hasPrevious: false, hasNext: true };
@@ -145,8 +146,8 @@ describe('FileList professional table and pagination', () => {
       />,
     ));
 
-    expect([...container.querySelectorAll('[role="columnheader"]')].map((cell) => cell.textContent)).toEqual(['Name', 'Type', 'Size', 'Visibility', 'Uploaded', 'Actions']);
-    expect([...container.querySelectorAll('[role="cell"]')][2].textContent).toBe('<0.01 MB');
+    expect([...container.querySelectorAll('[role="columnheader"]')].map((cell) => cell.textContent)).toEqual(['', 'Name', 'Type', 'Size', 'Visibility', 'Uploaded', 'Actions']);
+    expect([...container.querySelectorAll('[role="cell"]')][3].textContent).toBe('<0.01 MB');
     expect(container.textContent).toContain('27 total');
     expect(container.textContent).toContain('Showing 1 to 5 of 27');
     expect(container.querySelector('[aria-label="Page 1"]').getAttribute('aria-current')).toBe('page');
@@ -313,5 +314,252 @@ describe('FileList professional table and pagination', () => {
     await act(async () => [...container.querySelectorAll('.delete-dialog button')].find((button) => button.textContent.trim() === 'Delete permanently').click());
     expect(apiFetch).toHaveBeenNthCalledWith(2, '/api/files/file-1', { method: 'DELETE' });
     expect(onDelete).toHaveBeenCalledWith('file-1');
+  });
+
+  describe('bulk page selection and actions', () => {
+    const secondFile = { ...file, id: 'file-2', originalName: 'photo.png', mimeType: 'image/png', favorite: true };
+
+    function renderFiles(overrides = {}) {
+      const props = {
+        files: [file, secondFile],
+        pagination: { page: 1, limit: 5, total: 7, totalPages: 2, hasPrevious: false, hasNext: true },
+        onPageChange: vi.fn(),
+        onChange: vi.fn(),
+        onFavorite: vi.fn(),
+        onTrash: vi.fn(),
+        onRestore: vi.fn(),
+        onDelete: vi.fn(),
+        onBulkComplete: vi.fn(),
+        ...common,
+        ...overrides,
+      };
+      act(() => root.render(<FileList {...props} />));
+      return props;
+    }
+
+    function checkbox(label) {
+      return container.querySelector(`input[aria-label="${label}"]`);
+    }
+
+    function bulkButton(label) {
+      return [...container.querySelectorAll('.bulk-action-toolbar button')]
+        .find((element) => element.textContent.trim() === label);
+    }
+
+    function openDialogButton(label) {
+      return [...container.querySelectorAll('dialog[open] button')]
+        .find((element) => element.textContent.trim() === label);
+    }
+
+    async function confirm(label) {
+      await act(async () => {
+        openDialogButton(label).click();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    }
+
+    it('selects rows by file ID, supports indeterminate Select All, deselection, and clearing', () => {
+      renderFiles();
+      const selectAll = checkbox('Select all files on this page');
+      const report = checkbox('Select report.pdf');
+      const photo = checkbox('Select photo.png');
+
+      act(() => report.click());
+      expect(report.checked).toBe(true);
+      expect(selectAll.indeterminate).toBe(true);
+      expect(selectAll.getAttribute('aria-checked')).toBe('mixed');
+      expect(container.querySelector('.bulk-action-toolbar').textContent).toContain('1 selected');
+
+      act(() => selectAll.click());
+      expect(report.checked).toBe(true);
+      expect(photo.checked).toBe(true);
+      expect(selectAll.checked).toBe(true);
+      expect(container.querySelector('.bulk-action-toolbar').textContent).toContain('2 selected');
+
+      act(() => photo.click());
+      expect(report.checked).toBe(true);
+      expect(photo.checked).toBe(false);
+      act(() => bulkButton('Clear selection').click());
+      expect(container.querySelector('.bulk-action-toolbar')).toBeNull();
+    });
+
+    it('limits Select All to visible files and clears selection when the page changes', () => {
+      const props = renderFiles();
+      act(() => checkbox('Select all files on this page').click());
+      act(() => container.querySelector('[aria-label="Next page"]').click());
+      expect(props.onPageChange).toHaveBeenCalledWith(2);
+      expect(container.querySelector('.bulk-action-toolbar')).toBeNull();
+
+      renderFiles({
+        ...props,
+        files: [{ ...file, id: 'file-3', originalName: 'page-two.pdf' }],
+        pagination: { page: 2, limit: 5, total: 7, totalPages: 2, hasPrevious: true, hasNext: false },
+      });
+      expect(checkbox('Select page-two.pdf').checked).toBe(false);
+      expect(checkbox('Select all files on this page').checked).toBe(false);
+    });
+
+    it('preserves selection by stable file ID when visible rows reorder', () => {
+      const props = renderFiles();
+      act(() => checkbox('Select report.pdf').click());
+      renderFiles({ ...props, files: [secondFile, file] });
+      expect(checkbox('Select report.pdf').checked).toBe(true);
+      expect(checkbox('Select photo.png').checked).toBe(false);
+    });
+
+    it.each([
+      ['search', () => container.querySelector('.toolbar-search input'), 'input', 'budget'],
+      ['sort', () => container.querySelector('.file-toolbar select'), 'change', 'oldest'],
+      ['visibility filter', () => container.querySelectorAll('.file-toolbar select')[1], 'change', 'PRIVATE'],
+    ])('clears selection immediately when %s changes', (_name, target, eventName, value) => {
+      renderFiles();
+      act(() => checkbox('Select report.pdf').click());
+      const control = target();
+      act(() => {
+        Object.getOwnPropertyDescriptor(control.constructor.prototype, 'value').set.call(control, value);
+        control.dispatchEvent(new Event(eventName, { bubbles: true }));
+      });
+      expect(container.querySelector('.bulk-action-toolbar')).toBeNull();
+    });
+
+    it('scopes selection to the current sidebar view', () => {
+      const props = renderFiles({ view: 'favorites' });
+      act(() => checkbox('Select report.pdf').click());
+      renderFiles({ ...props, view: 'trash' });
+      expect(checkbox('Select report.pdf').checked).toBe(false);
+      expect(container.querySelector('.bulk-action-toolbar')).toBeNull();
+    });
+
+    it.each(['dashboard', 'files', 'shared', 'recent', 'favorites'])(
+      'offers only Move to Trash for selected files in the %s view',
+      (view) => {
+        renderFiles({ view, sharedOnly: view === 'shared' });
+        act(() => checkbox('Select report.pdf').click());
+        expect(bulkButton('Move selected files to Trash')).toBeTruthy();
+        expect(bulkButton('Restore selected files')).toBeUndefined();
+        expect(bulkButton('Delete selected files permanently')).toBeUndefined();
+      },
+    );
+
+    it('offers Restore and permanent deletion, but not Move to Trash, in Trash', () => {
+      renderFiles({ view: 'trash', sort: 'deleted-newest' });
+      act(() => checkbox('Select all files on this page').click());
+      expect(bulkButton('Restore selected files')).toBeTruthy();
+      expect(bulkButton('Delete selected files permanently')).toBeTruthy();
+      expect(bulkButton('Move selected files to Trash')).toBeUndefined();
+    });
+
+    it('confirms and independently moves selected files to Trash', async () => {
+      const onBulkComplete = vi.fn();
+      apiFetch.mockResolvedValue({});
+      renderFiles({ onBulkComplete });
+      act(() => checkbox('Select all files on this page').click());
+      act(() => bulkButton('Move selected files to Trash').click());
+      expect(container.querySelector('dialog[open] h3').textContent).toBe('Move 2 files to Trash?');
+      expect(container.querySelector('dialog[open]').textContent).toContain('can be restored later');
+      await confirm('Move to Trash');
+
+      expect(apiFetch.mock.calls).toEqual([
+        ['/api/files/file-1/trash', { method: 'POST' }],
+        ['/api/files/file-2/trash', { method: 'POST' }],
+      ]);
+      expect(onBulkComplete).toHaveBeenCalledWith(expect.objectContaining({ action: 'trash', successCount: 2, failedIds: [] }));
+      expect(container.textContent).toContain('2 files moved to Trash.');
+      expect(container.querySelector('.bulk-action-toolbar')).toBeNull();
+    });
+
+    it('restores selected Trash files through the existing endpoint', async () => {
+      apiFetch.mockResolvedValue({});
+      renderFiles({ view: 'trash', sort: 'deleted-newest' });
+      act(() => checkbox('Select report.pdf').click());
+      act(() => bulkButton('Restore selected files').click());
+      expect(container.querySelector('dialog[open] h3').textContent).toBe('Restore 1 file?');
+      await confirm('Restore files');
+      expect(apiFetch).toHaveBeenCalledWith('/api/files/file-1/restore', { method: 'POST' });
+      expect(container.textContent).toContain('1 file restored.');
+    });
+
+    it('confirms irreversible deletion and uses DELETE only in Trash', async () => {
+      apiFetch.mockResolvedValue(null);
+      renderFiles({ view: 'trash', sort: 'deleted-newest' });
+      act(() => checkbox('Select all files on this page').click());
+      act(() => bulkButton('Delete selected files permanently').click());
+      expect(container.querySelector('dialog[open] h3').textContent).toBe('Permanently delete 2 files?');
+      expect(container.querySelector('dialog[open]').textContent).toContain('This action cannot be undone.');
+      await confirm('Delete permanently');
+      expect(apiFetch.mock.calls).toEqual([
+        ['/api/files/file-1', { method: 'DELETE' }],
+        ['/api/files/file-2', { method: 'DELETE' }],
+      ]);
+    });
+
+    it('keeps failed items selected and retryable after partial success', async () => {
+      const onBulkComplete = vi.fn().mockResolvedValue(undefined);
+      apiFetch.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('Denied'));
+      renderFiles({ onBulkComplete });
+      act(() => checkbox('Select all files on this page').click());
+      act(() => bulkButton('Move selected files to Trash').click());
+      await confirm('Move to Trash');
+
+      expect(container.textContent).toContain('1 file moved to Trash. 1 file could not be moved.');
+      expect(checkbox('Select report.pdf').checked).toBe(false);
+      expect(checkbox('Select photo.png').checked).toBe(true);
+      expect(container.querySelector('.bulk-action-toolbar').textContent).toContain('1 selected');
+      expect(onBulkComplete).toHaveBeenCalledWith(expect.objectContaining({ succeededIds: ['file-1'], failedIds: ['file-2'] }));
+
+      apiFetch.mockResolvedValueOnce({});
+      act(() => bulkButton('Move selected files to Trash').click());
+      await confirm('Move to Trash');
+      expect(apiFetch).toHaveBeenLastCalledWith('/api/files/file-2/trash', { method: 'POST' });
+      expect(container.querySelector('.bulk-action-toolbar')).toBeNull();
+    });
+
+    it('blocks duplicate submission and caps request concurrency at two', async () => {
+      const files = Array.from({ length: 5 }, (_, index) => ({
+        ...file,
+        id: `file-${index + 1}`,
+        originalName: `file-${index + 1}.pdf`,
+      }));
+      const pending = [];
+      let active = 0;
+      let maximumActive = 0;
+      apiFetch.mockImplementation(() => new Promise((resolve) => {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        pending.push(() => {
+          active -= 1;
+          resolve({});
+        });
+      }));
+      renderFiles({ files, pagination: { page: 1, limit: 5, total: 5, totalPages: 1, hasPrevious: false, hasNext: false } });
+      act(() => checkbox('Select all files on this page').click());
+      act(() => bulkButton('Move selected files to Trash').click());
+      const submit = openDialogButton('Move to Trash');
+      act(() => {
+        submit.click();
+        submit.click();
+      });
+      expect(apiFetch).toHaveBeenCalledTimes(2);
+      expect(maximumActive).toBe(2);
+      expect(submit.disabled).toBe(true);
+      expect(submit.textContent).toBe('Working…');
+
+      while (pending.length > 0 || apiFetch.mock.calls.length < files.length) {
+        const settle = pending.shift();
+        if (settle) await act(async () => { settle(); await Promise.resolve(); });
+      }
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      expect(apiFetch).toHaveBeenCalledTimes(5);
+      expect(maximumActive).toBe(2);
+    });
+
+    it('keeps mobile selection structure inside each file card', () => {
+      renderFiles();
+      expect(container.querySelector('.mobile-select-all').textContent).toContain('Select all files on this page');
+      for (const row of container.querySelectorAll('.file-row')) {
+        expect(row.querySelector('.selection-cell input')).not.toBeNull();
+      }
+    });
   });
 });

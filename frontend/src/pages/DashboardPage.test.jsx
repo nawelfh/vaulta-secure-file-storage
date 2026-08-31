@@ -28,6 +28,8 @@ vi.mock('../components/FileList.jsx', () => ({
       <button type="button" onClick={() => props.onTrash(props.files[0]?.id)}>Trash file</button>
       <button type="button" onClick={() => props.onRestore(props.files[0]?.id)}>Restore file</button>
       <button type="button" onClick={() => props.onDelete(props.files[0]?.id)}>Permanently delete file</button>
+      <button type="button" onClick={() => props.onPageChange(6)}>Page 6 direct</button>
+      <button type="button" onClick={() => props.onBulkComplete({ action: 'trash', successCount: 2, succeededIds: ['one', 'two'], failedIds: [] })}>Complete bulk mutation</button>
     </section>
   ),
 }));
@@ -219,5 +221,18 @@ describe('DashboardPage file controls', () => {
     await click('Permanently delete file'); await flush();
     expect(getStorageStats).toHaveBeenCalledTimes(6);
     expect(getFiles.mock.calls.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it('refreshes authoritative stats and recovers to the nearest valid page after bulk mutation', async () => {
+    renderDashboard(); await flush();
+    await click('Page 6 direct'); await flush();
+    expect(getFiles).toHaveBeenLastCalledWith(expect.objectContaining({ page: 6 }));
+    getFiles.mockResolvedValueOnce({
+      ...page,
+      pagination: { ...page.pagination, page: 5, total: 25, totalPages: 5, hasPrevious: true, hasNext: false },
+    });
+    await click('Complete bulk mutation'); await flush();
+    expect(getStorageStats).toHaveBeenCalledTimes(2);
+    expect(getFiles).toHaveBeenLastCalledWith(expect.objectContaining({ page: 5 }));
   });
 });

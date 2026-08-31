@@ -202,6 +202,10 @@ export function DashboardPage() {
     return refreshAfterMutation();
   }
 
+  function handleBulkMutation() {
+    return refreshAfterMutation();
+  }
+
   const listContent = {
     dashboard: ['Current Files', 'Your latest completed uploads.'],
     files: ['My Files', 'All active completed files in your secure vault.'],
@@ -252,6 +256,7 @@ export function DashboardPage() {
               onTrash={handleStorageMutation}
               onRestore={handleStorageMutation}
               onDelete={handleStorageMutation}
+              onBulkComplete={handleBulkMutation}
               title={listContent[0]}
               description={listContent[1]}
               search={searchInput}
