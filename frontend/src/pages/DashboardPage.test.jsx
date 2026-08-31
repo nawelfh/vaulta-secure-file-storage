@@ -145,6 +145,10 @@ describe('DashboardPage file controls', () => {
     expect(getStorageStats).toHaveBeenCalledTimes(1);
     expect(container.querySelector('[data-testid="file-list"]').dataset.total).toBe('27');
     expect(container.textContent).toContain('23.93%');
+    expect(container.querySelector('.storage-usage').textContent).toBe('245 MB of 1 GB used');
+    expect(container.querySelector('.storage-progress-meta').textContent).toContain('779 MB remaining');
+    expect(container.querySelector('.stat-card:last-child strong').textContent).toBe('245 MB');
+    expect(container.querySelector('.sidebar-storage-meta').textContent).toBe('245 MB used779 MB left');
   });
 
   it('debounces synchronized search by 300ms and resets to page one', async () => {

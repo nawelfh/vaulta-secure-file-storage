@@ -1,13 +1,15 @@
 export function formatBytes(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB'];
-  let value = bytes;
-  let unit = -1;
-  do {
-    value /= 1024;
-    unit += 1;
-  } while (value >= 1024 && unit < units.length - 1);
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
+  const mebibyte = 1024 ** 2;
+  const gibibyte = 1024 ** 3;
+
+  if (bytes === 0) return '0 MB';
+
+  const megabytes = bytes / mebibyte;
+  if (megabytes < 0.01) return '<0.01 MB';
+
+  const value = bytes < gibibyte ? megabytes : bytes / gibibyte;
+  const unit = bytes < gibibyte ? 'MB' : 'GB';
+  return `${Number(value.toFixed(2))} ${unit}`;
 }
 
 export function formatDate(value) {

@@ -146,6 +146,7 @@ describe('FileList professional table and pagination', () => {
     ));
 
     expect([...container.querySelectorAll('[role="columnheader"]')].map((cell) => cell.textContent)).toEqual(['Name', 'Type', 'Size', 'Visibility', 'Uploaded', 'Actions']);
+    expect([...container.querySelectorAll('[role="cell"]')][2].textContent).toBe('<0.01 MB');
     expect(container.textContent).toContain('27 total');
     expect(container.textContent).toContain('Showing 1 to 5 of 27');
     expect(container.querySelector('[aria-label="Page 1"]').getAttribute('aria-current')).toBe('page');
