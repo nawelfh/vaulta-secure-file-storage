@@ -112,6 +112,12 @@ paths:
     post:
       tags: [Files]
       summary: Initialize a private multipart upload
+      description: >-
+        This request initializes the upload of one file. Clients may implement
+        multi-file upload by initiating independent requests for queued files;
+        there is no batch upload endpoint or shared authorization transaction.
+        Each initialized file uses the existing multipart part-signing and
+        completion endpoints.
       security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true

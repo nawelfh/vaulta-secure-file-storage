@@ -25,6 +25,7 @@ The application protects account credentials, session secrets, private file byte
 
 - Allowed types are PDF, PNG, JPEG, GIF, WebP, MP4, WebM, QuickTime MOV, plain text, and ZIP.
 - File name, extension, declared MIME, integer size, and configured maximum are checked by the API.
+- Multi-file selection is client-side queue orchestration, not one shared authorization transaction. Every queued file is independently authorized and validated by the backend, which remains authoritative for ownership, extension, MIME type, size, stored length, and content verification. A failure for one file cannot weaken or bypass validation for another. The queue starts at most two files concurrently; each file continues to use the existing per-file multipart flow.
 - Completion reads at most the first 4096 object bytes. GIF requires `GIF87a` or `GIF89a`; WebP requires both `RIFF` and `WEBP` markers at their defined offsets; WebM requires a bounded EBML header containing the exact `webm` DocType.
 - MP4 and MOV require a structurally valid top-level ISO-BMFF `ftyp` box within that prefix. MP4 requires at least one of these major or compatible brands: `isom`, `iso2`–`iso9`, `mp41`, `mp42`, `mp71`, `avc1`, `M4V `, `M4VH`, `M4VP`, `F4V `, `MSNV`, `dash`, `cmfc`, or `cmfs`. MOV requires the QuickTime `qt  ` brand. Malformed, oversized-prefix, truncated, unbranded, or MIME/extension-mismatched media is rejected.
 - Storage keys are generated and contain no user filename.

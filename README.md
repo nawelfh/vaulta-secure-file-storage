@@ -2,7 +2,7 @@
 
 Vaulta is a full-stack secure file storage service built entirely with JavaScript, React, Node.js/Express, PostgreSQL, and S3-compatible object storage.
 
-Authenticated users can upload files up to 250 MB, manage them from a personal dashboard, keep them private, create revocable public sharing links, download them, and delete them safely.
+Authenticated users can upload files up to 250 MiB each, manage them from a personal dashboard, keep them private, create revocable public sharing links, download them, and delete them safely.
 
 The implementation prioritizes authorization and file safety. The object-storage bucket remains private, internal storage keys are never exposed as application identifiers, and large file bytes are uploaded directly from the browser to object storage instead of passing through the Express server.
 
@@ -14,9 +14,10 @@ The implementation prioritizes authorization and file safety. The object-storage
 - Opaque, revocable sessions stored in `HttpOnly` cookies
 - Session-bound CSRF protection for authenticated mutations
 - Strict owner authorization for private files
-- Direct multipart uploads with progress reporting and cancellation
-- Three concurrent upload parts for improved performance
-- Upload support up to 250 MB, covering the required 100 MB minimum
+- Multi-file upload queue with independent progress, cancellation, and retry
+- Up to two files uploading concurrently
+- Storage-level multipart uploads with up to three concurrent parts per file
+- Upload support up to 250 MiB per file, covering the required 100 MB minimum
 - Validation of filename, extension, declared MIME type, size, and file signature
 - Private files by default
 - Unguessable, revocable 256-bit public share tokens
@@ -53,6 +54,15 @@ UPLOADING → REJECTED
 Only `READY` files can appear in the dashboard, be downloaded, or be made public. If the uploaded content does not match its declared type, the file becomes `REJECTED`, its stored object is deleted, and it is excluded from all user file lists.
 
 Before setting a file to `READY`, the API verifies the actual object size and reads a small content prefix to validate its signature.
+
+### Multi-file and multipart uploads
+
+Vaulta uses two distinct upload layers:
+
+- **Multi-file upload** means selecting one or multiple files, or dragging and dropping several files, into a queue. Every selected file is validated independently and has its own status, progress, cancellation, and retry controls. Success or failure is independent per file, so one failed file does not cancel files that uploaded successfully. The queue uploads at most two files concurrently.
+- **Multipart upload** is the storage-level transfer used inside each individual queued file. One file is split into storage parts, with up to three parts transferred concurrently.
+
+Each queued file independently uses the existing authenticated per-file multipart upload flow. The 250 MiB limit applies to each file. Supported formats remain JPG/JPEG, PNG, GIF, WebP, MP4, WebM, MOV, PDF, TXT, and ZIP.
 
 ## Project structure
 
