@@ -11,6 +11,7 @@ export function AuthPage({ mode }) {
   const { user, loading, authenticate } = useAuth();
 
   const [form, setForm] = useState({
+    name: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -45,6 +46,7 @@ export function AuthPage({ mode }) {
 
     try {
       await authenticate(mode, {
+        ...(isRegister ? { name: form.name } : {}),
         email: form.email,
         password: form.password,
       });
@@ -113,6 +115,22 @@ export function AuthPage({ mode }) {
               ? 'One account. Your files, under your control.'
               : 'Enter your details to access your files.'}
           </p>
+
+          {isRegister && (
+            <label>
+              Name
+
+              <input
+                type="text"
+                autoComplete="name"
+                required
+                maxLength="100"
+                placeholder="Your name"
+                value={form.name}
+                onChange={(event) => updateField('name', event.target.value)}
+              />
+            </label>
+          )}
 
           <label>
             Email address

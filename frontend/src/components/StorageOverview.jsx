@@ -46,14 +46,16 @@ export function StorageOverview({ stats, loading, refreshing, error, onRetry }) 
         <div className="storage-card-heading">
           <div>
             <p className="eyebrow">Account allocation</p>
-            <h2 id="storage-heading">Storage</h2>
+            <h2 id="storage-heading">Storage Overview</h2>
           </div>
           <span className="storage-card-icon"><Icon name="storage" /></span>
         </div>
-        <p className="storage-usage">
-          <strong>{formatBytes(stats.usedBytes)}</strong>
-          <span> of {formatBytes(stats.quotaBytes)} used</span>
-        </p>
+        <div className="storage-visual-row">
+          <div className="storage-ring" style={{ '--usage': `${stats.percentageUsed}%` }} role="img" aria-label={`${stats.percentageUsed}% of storage used`}>
+            <span><strong>{stats.percentageUsed}%</strong><small>used</small></span>
+          </div>
+          <p className="storage-usage"><strong>{formatBytes(stats.usedBytes)}</strong><span> of {formatBytes(stats.quotaBytes)} used</span></p>
+        </div>
         <div className="storage-progress-meta">
           <span>{stats.percentageUsed}% used</span>
           <span>{formatBytes(stats.remainingBytes)} remaining</span>

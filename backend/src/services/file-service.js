@@ -22,7 +22,9 @@ function publicFile(file, appOrigin) {
     status: file.status,
     visibility: file.visibility,
     rejectionReason: file.rejectionReason,
-    shareUrl: file.shareToken ? `${appOrigin}/share/${file.shareToken}` : null,
+    favorite: file.isFavorite,
+    trashedAt: file.trashedAt,
+    shareUrl: file.shareToken && !file.trashedAt ? `${appOrigin}/share/${file.shareToken}` : null,
     createdAt: file.createdAt,
     updatedAt: file.updatedAt,
   };
@@ -146,9 +148,25 @@ export function createFileService({ files, storage, config }) {
       };
     },
 
+    async listPage({ ownerId, page, limit, search, sort, visibility, view }) {
+      const result = await files.listOwnedPage({
+        ownerId,
+        page,
+        limit,
+        search,
+        sort,
+        visibility,
+        view,
+      });
+      return {
+        files: result.files.map((file) => publicFile(file, config.appOrigin)),
+        pagination: result.pagination,
+      };
+    },
+
     async setVisibility({ ownerId, fileId, visibility }) {
       const current = requireFile(await files.findOwned(fileId, ownerId));
-      if (current.status !== 'READY') {
+      if (current.status !== 'READY' || current.trashedAt) {
         throw new ApiError(409, 'FILE_NOT_READY', 'Only completed files can be shared.');
       }
       const shareToken = visibility === 'PUBLIC' ? (current.shareToken || randomToken()) : null;
@@ -156,9 +174,36 @@ export function createFileService({ files, storage, config }) {
       return publicFile(file, config.appOrigin);
     },
 
+    async setFavorite({ ownerId, fileId, favorite }) {
+      const current = requireFile(await files.findOwned(fileId, ownerId));
+      if (current.status !== 'READY' || current.trashedAt) {
+        throw new ApiError(409, 'FILE_NOT_ACTIVE', 'Only active completed files can be favorited.');
+      }
+      const file = requireFile(await files.updateFavorite({ id: fileId, ownerId, favorite }));
+      return publicFile(file, config.appOrigin);
+    },
+
+    async moveToTrash({ ownerId, fileId }) {
+      const current = requireFile(await files.findOwned(fileId, ownerId));
+      if (current.status !== 'READY' || current.trashedAt) {
+        throw new ApiError(409, 'FILE_NOT_ACTIVE', 'Only active completed files can be moved to Trash.');
+      }
+      const file = requireFile(await files.moveToTrash({ id: fileId, ownerId }));
+      return publicFile(file, config.appOrigin);
+    },
+
+    async restore({ ownerId, fileId }) {
+      const current = requireFile(await files.findOwned(fileId, ownerId));
+      if (current.status !== 'READY' || !current.trashedAt) {
+        throw new ApiError(409, 'FILE_NOT_TRASHED', 'Only trashed completed files can be restored.');
+      }
+      const file = requireFile(await files.restoreFromTrash({ id: fileId, ownerId }));
+      return publicFile(file, config.appOrigin);
+    },
+
     async getOwnerDownload({ ownerId, fileId }) {
       const file = requireFile(await files.findOwned(fileId, ownerId));
-      if (file.status !== 'READY') throw new ApiError(409, 'FILE_NOT_READY', 'The file is not ready to download.');
+      if (file.status !== 'READY' || file.trashedAt) throw new ApiError(409, 'FILE_NOT_ACTIVE', 'The file is not available for download.');
       return {
         url: await storage.signDownload({
           key: file.storageKey,
@@ -195,10 +240,14 @@ export function createFileService({ files, storage, config }) {
         }).catch((error) => {
           if (error.name !== 'NoSuchUpload') throw error;
         });
-      } else if (file.status === 'READY') {
-        await storage.delete(file.storageKey);
+        await files.deleteOwned(fileId, ownerId);
+        return;
       }
-      await files.deleteOwned(fileId, ownerId);
+      if (file.status !== 'READY' || !file.trashedAt) {
+        throw new ApiError(409, 'FILE_NOT_TRASHED', 'Only trashed files can be permanently deleted.');
+      }
+      await storage.delete(file.storageKey);
+      requireFile(await files.deleteTrashed(fileId, ownerId));
     },
   };
 }

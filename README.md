@@ -8,7 +8,7 @@ The implementation prioritizes authorization and file safety. The object-storage
 
 ## Core capabilities
 
-- Account registration with email and password
+- Account registration with a display name, email, and password
 - Repeated-password confirmation on the registration page
 - Argon2id password hashing
 - Opaque, revocable sessions stored in `HttpOnly` cookies
@@ -24,12 +24,14 @@ The implementation prioritizes authorization and file safety. The object-storage
 - Five-minute presigned download URLs from a private bucket
 - Confirmation popup before deleting a file
 - Only validated `READY` files displayed in the dashboard
-- Cursor pagination, structured API errors, request IDs, and rate limiting
+- Owner-scoped server search, visibility filtering, fixed sorting, numbered pagination, and cursor compatibility
+- Persistent Favorites with accessible row controls
+- Restorable Trash with explicit Trash-only permanent deletion
 - Responsive interface with a sticky footer on large screens
 - Custom Vaulta favicon
 - SQL migrations, automated tests, linting, production build, and CI
 
-The repeated-password field is validated only in the browser. It is never sent to the backend because the API only needs the final password.
+The repeated-password field is validated only in the browser. It is never sent to the backend because the API only needs the final password. New accounts require a trimmed display name; accounts created before the name migration remain valid and receive a neutral greeting until profile editing is added.
 
 ## Architecture
 
@@ -169,13 +171,16 @@ The credentials provided in `.env.example` are intended only for local developme
 | `POST` | `/api/auth/login` | Public | Authenticate and create a session |
 | `GET` | `/api/auth/me` | Authenticated | Restore the current user |
 | `POST` | `/api/auth/logout` | Authenticated + CSRF | Revoke the current session |
-| `GET` | `/api/files` | Owner | List the owner's validated files |
+| `GET` | `/api/files` | Owner | Search, filter, sort, and paginate active, recent, favorite, or trashed files |
 | `POST` | `/api/files/uploads` | Owner + CSRF | Initialize a multipart upload |
 | `POST` | `/api/files/:id/parts` | Owner + CSRF | Sign selected upload parts |
 | `POST` | `/api/files/:id/complete` | Owner + CSRF | Verify and complete an upload |
 | `PATCH` | `/api/files/:id` | Owner + CSRF | Change public/private visibility |
+| `PATCH` | `/api/files/:id/favorite` | Owner + CSRF | Set persistent favorite state |
+| `POST` | `/api/files/:id/trash` | Owner + CSRF | Move an active file to Trash without deleting storage |
+| `POST` | `/api/files/:id/restore` | Owner + CSRF | Restore a trashed file |
 | `GET` | `/api/files/:id/download` | Owner | Obtain a short-lived download URL |
-| `DELETE` | `/api/files/:id` | Owner + CSRF | Abort an upload or delete a file |
+| `DELETE` | `/api/files/:id` | Owner + CSRF | Abort an upload or permanently delete a trashed file |
 | `GET` | `/api/storage/stats` | Owner | Read authoritative READY-file counts and byte usage |
 | `GET` | `/api/public/:shareToken` | Public | Redirect to a short-lived download URL |
 
@@ -193,9 +198,10 @@ All API errors use the following structure:
 
 See [`docs/openapi.yaml`](docs/openapi.yaml) for the complete request and response schemas.
 
-Storage statistics are calculated from all of the authenticated owner's `READY` database records,
-not from a paginated frontend file list. `UPLOADING` and `REJECTED` records are excluded. The API
-reports a single assessment-wide quota of 1 GiB (1,073,741,824 bytes); this quota is informational
+Storage file counts describe active, non-trashed `READY` records and are independent of paginated lists.
+`usedBytes` includes every `READY` stored object, including Trash, because moving a file does not free
+storage. Permanent deletion removes the object and reduces usage. `UPLOADING` and `REJECTED` records are
+excluded. The API reports a single assessment-wide quota of 1 GiB (1,073,741,824 bytes); this quota is informational
 until a future atomic upload-reservation mechanism can enforce it safely across concurrent uploads.
 
 ## Security design
@@ -236,6 +242,9 @@ After authorization, the backend creates a presigned object-storage download URL
 
 ## Interface behavior
 
+- The dashboard uses five-file server pages with deterministic sorting and literal, debounced filename search.
+- Dashboard, My Files, Shared files, Recent, Favorites, and Trash are URL-backed views. Shared files means public files owned by the signed-in user.
+- Trashed public files immediately stop resolving through public links; restoration preserves their prior visibility and favorite state.
 - The registration form requires the password to be entered twice.
 - Account creation is blocked when both passwords differ.
 - Deleting a file opens an accessible confirmation dialog.

@@ -5,8 +5,8 @@ import { sha256 } from '../src/utils/crypto.js';
 
 function harness(existingUser = null) {
   const users = {
-    create: vi.fn(async ({ email, passwordHash }) => ({
-      id: 'user-1', email, passwordHash, createdAt: new Date(),
+    create: vi.fn(async ({ name, email, passwordHash }) => ({
+      id: 'user-1', name, email, passwordHash, createdAt: new Date(),
     })),
     findByEmail: vi.fn(async () => existingUser),
   };
@@ -21,10 +21,11 @@ function harness(existingUser = null) {
 describe('authentication service', () => {
   it('hashes passwords and stores only hashes of session secrets', async () => {
     const { service, users, sessions } = harness();
-    const result = await service.register({ email: 'user@example.com', password: 'correct horse battery staple' });
+    const result = await service.register({ name: 'Ada Lovelace', email: 'user@example.com', password: 'correct horse battery staple' });
     const passwordHash = users.create.mock.calls[0][0].passwordHash;
     expect(passwordHash).toMatch(/^\$argon2id\$/);
     expect(await argon2.verify(passwordHash, 'correct horse battery staple')).toBe(true);
+    expect(users.create).toHaveBeenCalledWith(expect.objectContaining({ name: 'Ada Lovelace' }));
 
     const storedSession = sessions.create.mock.calls[0][0];
     expect(storedSession.tokenHash).toBe(sha256(result.sessionToken));

@@ -17,7 +17,7 @@ The application protects account credentials, session secrets, private file byte
 ### Authorization and CSRF
 
 - Repository reads and mutations take both `file_id` and `owner_id`; non-owners receive the same 404 as unknown files.
-- Public access uses a separate 256-bit token and only selects `PUBLIC + READY` records.
+- Public access uses a separate 256-bit token and only selects active, non-trashed `PUBLIC + READY` records.
 - State-changing authenticated routes require a CSRF header equal to a readable cookie and bound by hash to the server-side session.
 - Changing a file back to private removes its share token. A previously issued S3 URL can remain usable for at most its five-minute TTL.
 
@@ -38,6 +38,7 @@ The application protects account credentials, session secrets, private file byte
 - JSON bodies are limited to 64 KiB and validated with strict Zod schemas.
 - Helmet security headers, an exact frontend CORS origin, generic 500 responses, request IDs, structured logging, health endpoints, and graceful shutdown are configured.
 - SQL values are parameterized. Schema checks protect public/share-token and ready/upload-ID invariants.
+- Favorite, Trash, restore, and permanent-delete mutations require the authenticated owner and session-bound CSRF token. Permanent deletion is state-gated to Trash; moving to Trash never deletes object storage.
 - CI uses read-only repository permissions and runs migrations, lint, tests, and the frontend build.
 
 ## Production hardening still required

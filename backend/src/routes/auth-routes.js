@@ -3,13 +3,22 @@ import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { asyncHandler } from '../utils/async-handler.js';
 
-const credentialsSchema = z.object({
+const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(254),
   password: z.string().min(12, 'Use at least 12 characters.').max(128),
 }).strict();
 
+const registerSchema = loginSchema.extend({
+  name: z.string().trim().min(1, 'Enter your name.').max(100),
+}).strict();
+
 function userResponse(user) {
-  return { id: user.id, email: user.email, createdAt: user.createdAt };
+  return {
+    id: user.id,
+    name: user.name ?? null,
+    email: user.email,
+    createdAt: user.createdAt,
+  };
 }
 
 function setSessionCookies(response, config, session) {
@@ -48,14 +57,14 @@ export function createAuthRouter({ authService, auth, config }) {
   });
 
   router.post('/register', authLimiter, asyncHandler(async (request, response) => {
-    const input = credentialsSchema.parse(request.body);
+    const input = registerSchema.parse(request.body);
     const session = await authService.register(input);
     setSessionCookies(response, config, session);
     response.status(201).json({ user: userResponse(session.user) });
   }));
 
   router.post('/login', authLimiter, asyncHandler(async (request, response) => {
-    const input = credentialsSchema.parse(request.body);
+    const input = loginSchema.parse(request.body);
     const session = await authService.login(input);
     setSessionCookies(response, config, session);
     response.json({ user: userResponse(session.user) });

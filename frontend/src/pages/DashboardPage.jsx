@@ -1,82 +1,101 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiFetch } from '../api/client.js';
+import { useSearchParams } from 'react-router-dom';
+import { getFiles } from '../api/files.js';
 import { getStorageStats } from '../api/storage.js';
 import { AppFooter } from '../components/AppFooter.jsx';
+import { DashboardSidebar } from '../components/DashboardSidebar.jsx';
 import { FileList } from '../components/FileList.jsx';
 import { Icon } from '../components/Icons.jsx';
-import { Logo } from '../components/Logo.jsx';
 import { StorageOverview } from '../components/StorageOverview.jsx';
 import { UploadPanel } from '../components/UploadPanel.jsx';
 import { useAuth } from '../context/useAuth.js';
 
-function mergeUniqueFiles(current, incoming) {
-  const byId = new Map(current.map((file) => [file.id, file]));
-  for (const file of incoming) byId.set(file.id, file);
-  return [...byId.values()];
+const PAGE_SIZE = 5;
+const VALID_VIEWS = new Set(['files', 'shared', 'recent', 'favorites', 'trash']);
+
+function emptyPagination() {
+  return { page: 1, limit: PAGE_SIZE, total: 0, totalPages: 0, hasPrevious: false, hasNext: false };
 }
 
 export function DashboardPage() {
   const { user, logout } = useAuth();
-  const fileControllersRef = useRef(new Set());
-  const fileRequestsRef = useRef(new Set());
-  const statsControllersRef = useRef(new Set());
-  const statsRequestRef = useRef(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedView = searchParams.get('view');
+  const activeView = VALID_VIEWS.has(requestedView) ? requestedView : 'dashboard';
+  const fileControllerRef = useRef(null);
+  const statsControllerRef = useRef(null);
+  const requestSequenceRef = useRef(0);
+  const statsSequenceRef = useRef(0);
+  const uploadRef = useRef(null);
+  const pendingUploadFocusRef = useRef(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [files, setFiles] = useState([]);
   const [filesLoading, setFilesLoading] = useState(true);
-  const [filesLoadingMore, setFilesLoadingMore] = useState(false);
   const [filesError, setFilesError] = useState('');
-  const [nextCursor, setNextCursor] = useState(null);
+  const [pagination, setPagination] = useState(emptyPagination);
+  const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState('newest');
+  const [trashSort, setTrashSort] = useState('deleted-newest');
+  const [visibility, setVisibility] = useState('');
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsRefreshing, setStatsRefreshing] = useState(false);
   const [statsError, setStatsError] = useState('');
   const [accountError, setAccountError] = useState('');
 
-  const loadFiles = useCallback(async ({ cursor = null, append = false } = {}) => {
-    const requestKey = cursor || 'initial';
-    if (fileRequestsRef.current.has(requestKey)) return;
-    fileRequestsRef.current.add(requestKey);
+  const effectiveVisibility = activeView === 'shared' ? 'PUBLIC' : visibility;
+  const listView = ['recent', 'favorites', 'trash'].includes(activeView) ? activeView : 'active';
+  const effectiveSort = activeView === 'recent' ? 'newest' : activeView === 'trash' ? trashSort : sort;
+  const displayName = user.name?.trim() || '';
+  const avatarInitial = (displayName || user.email || '?').charAt(0).toUpperCase();
+
+  const loadFiles = useCallback(async ({ requestedPage = page } = {}) => {
+    const sequence = requestSequenceRef.current + 1;
+    requestSequenceRef.current = sequence;
+    fileControllerRef.current?.abort();
     const controller = new AbortController();
-    fileControllersRef.current.add(controller);
-    if (append) setFilesLoadingMore(true);
-    else setFilesLoading(true);
+    fileControllerRef.current = controller;
+    setFilesLoading(true);
     setFilesError('');
     try {
-      const query = new URLSearchParams({ limit: '50' });
-      if (cursor) query.set('cursor', cursor);
-      const result = await apiFetch(`/api/files?${query}`, { signal: controller.signal });
-      setFiles((current) => mergeUniqueFiles(current, result.items));
-      setNextCursor(result.nextCursor);
+      const result = await getFiles({
+        page: requestedPage,
+        limit: PAGE_SIZE,
+        search,
+        sort: effectiveSort,
+        visibility: effectiveVisibility,
+        view: listView,
+        signal: controller.signal,
+      });
+      if (sequence !== requestSequenceRef.current) return;
+      setFiles(result.files);
+      setPagination(result.pagination);
+      if (result.pagination.page !== requestedPage) setPage(result.pagination.page);
     } catch (error) {
-      if (error.name !== 'AbortError') setFilesError(error.message);
+      if (error.name !== 'AbortError' && sequence === requestSequenceRef.current) setFilesError(error.message);
     } finally {
-      fileRequestsRef.current.delete(requestKey);
-      fileControllersRef.current.delete(controller);
-      if (!controller.signal.aborted) {
-        setFilesLoading(false);
-        setFilesLoadingMore(false);
-      }
+      if (!controller.signal.aborted && sequence === requestSequenceRef.current) setFilesLoading(false);
     }
-  }, []);
+  }, [effectiveSort, effectiveVisibility, listView, page, search]);
 
   const loadStats = useCallback(async ({ background = false } = {}) => {
-    const requestNumber = statsRequestRef.current + 1;
-    statsRequestRef.current = requestNumber;
+    const sequence = statsSequenceRef.current + 1;
+    statsSequenceRef.current = sequence;
+    statsControllerRef.current?.abort();
     const controller = new AbortController();
-    statsControllersRef.current.add(controller);
+    statsControllerRef.current = controller;
     if (background) setStatsRefreshing(true);
     else setStatsLoading(true);
     setStatsError('');
     try {
       const result = await getStorageStats({ signal: controller.signal });
-      if (requestNumber === statsRequestRef.current) setStats(result);
+      if (sequence === statsSequenceRef.current) setStats(result);
     } catch (error) {
-      if (error.name !== 'AbortError' && requestNumber === statsRequestRef.current) {
-        setStatsError(error.message);
-      }
+      if (error.name !== 'AbortError' && sequence === statsSequenceRef.current) setStatsError(error.message);
     } finally {
-      statsControllersRef.current.delete(controller);
-      if (!controller.signal.aborted && requestNumber === statsRequestRef.current) {
+      if (!controller.signal.aborted && sequence === statsSequenceRef.current) {
         setStatsLoading(false);
         setStatsRefreshing(false);
       }
@@ -84,24 +103,43 @@ export function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    const fileControllers = fileControllersRef.current;
-    const fileRequests = fileRequestsRef.current;
-    const statsControllers = statsControllersRef.current;
+    const timeout = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [searchInput]);
+
+  useEffect(() => {
     let active = true;
     queueMicrotask(() => {
-      if (!active) return;
-      void loadFiles();
-      void loadStats();
+      if (active) void loadFiles();
     });
     return () => {
       active = false;
-      for (const controller of fileControllers) controller.abort();
-      for (const controller of statsControllers) controller.abort();
-      fileControllers.clear();
-      fileRequests.clear();
-      statsControllers.clear();
+      fileControllerRef.current?.abort();
     };
-  }, [loadFiles, loadStats]);
+  }, [loadFiles]);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) void loadStats();
+    });
+    return () => {
+      active = false;
+      statsControllerRef.current?.abort();
+    };
+  }, [loadStats]);
+
+  useEffect(() => {
+    if (activeView !== 'dashboard' || !pendingUploadFocusRef.current) return;
+    pendingUploadFocusRef.current = false;
+    requestAnimationFrame(() => {
+      uploadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      uploadRef.current?.querySelector('.file-button')?.focus({ preventScroll: true });
+    });
+  }, [activeView]);
 
   async function signOut() {
     setAccountError('');
@@ -112,95 +150,123 @@ export function DashboardPage() {
     }
   }
 
-  function refreshStats() {
+  function changePage(nextPage) {
+    if (nextPage === page || nextPage < 1) return;
+    setPage(nextPage);
+    document.querySelector('.files-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function changeSort(nextSort) {
+    if (activeView === 'trash') setTrashSort(nextSort);
+    else setSort(nextSort);
+    setPage(1);
+  }
+
+  function changeVisibility(nextVisibility) {
+    setVisibility(nextVisibility);
+    setPage(1);
+  }
+
+  function showUploader() {
+    pendingUploadFocusRef.current = true;
+    if (activeView !== 'dashboard') {
+      setSearchParams({}, { replace: false });
+      return;
+    }
+    pendingUploadFocusRef.current = false;
+    uploadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    uploadRef.current?.querySelector('.file-button')?.focus({ preventScroll: true });
+  }
+
+  async function refreshAfterMutation({ firstPage = false } = {}) {
     void loadStats({ background: true });
+    if (firstPage && page !== 1) setPage(1);
+    else await loadFiles({ requestedPage: firstPage ? 1 : page });
   }
 
-  function handleUploaded(file) {
-    setFiles((current) => [file, ...current.filter((item) => item.id !== file.id)]);
-    refreshStats();
+  function handleUploaded() {
+    void refreshAfterMutation({ firstPage: effectiveSort === 'newest' });
   }
 
-  function handleChanged(changed) {
+  function handleChanged() {
+    return refreshAfterMutation();
+  }
+
+  function handleFavorite(changed) {
+    if (activeView === 'favorites' && !changed.favorite) return loadFiles({ requestedPage: page });
     setFiles((current) => current.map((file) => file.id === changed.id ? changed : file));
-    refreshStats();
+    return Promise.resolve();
   }
 
-  function handleDeleted(id) {
-    setFiles((current) => current.filter((file) => file.id !== id));
-    refreshStats();
+  function handleStorageMutation() {
+    return refreshAfterMutation();
   }
+
+  const listContent = {
+    dashboard: ['Current Files', 'Your latest completed uploads.'],
+    files: ['My Files', 'All active completed files in your secure vault.'],
+    shared: ['Shared Files', 'Public files you own and have chosen to share.'],
+    recent: ['Recent Files', 'Your active files ordered by most recent upload.'],
+    favorites: ['Favorites', 'Active files you have marked for quick access.'],
+    trash: ['Trash', 'Restore files or remove them permanently. Trashed files still use storage.'],
+  }[activeView];
 
   return (
     <div className="app-shell dashboard-shell">
-      <header className="app-header dashboard-header">
-        <Logo />
-        <nav className="dashboard-nav" aria-label="Dashboard sections">
-          <a href="#overview" aria-current="page">Overview</a>
-          <a href="#files">My files</a>
-        </nav>
-        <div className="account-menu">
-          <a className="button button-primary header-upload" href="#upload">Upload files</a>
-          <span className="avatar" aria-hidden="true">{user.email[0].toUpperCase()}</span>
-          <span className="account-email">{user.email}</span>
-          <button type="button" className="button button-ghost" onClick={signOut}>Sign out</button>
+      <div className="dashboard-frame">
+        <DashboardSidebar activeView={activeView} open={sidebarOpen} stats={stats} onClose={() => setSidebarOpen(false)} onNavigate={() => setPage(1)} onSignOut={signOut} />
+        {sidebarOpen && <button type="button" className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
+
+        <div className="dashboard-workspace">
+          <header className="dashboard-topbar">
+            <button type="button" className="mobile-menu-button" aria-label="Open navigation" aria-controls="dashboard-navigation" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)}><Icon name="menu" /></button>
+            <div className="topbar-welcome">
+              <h1>Welcome back{displayName ? `, ${displayName}` : ''}</h1>
+              <p>Here&apos;s what&apos;s happening with your files today.</p>
+            </div>
+            <label className="header-search"><span className="sr-only">Search all your files</span><Icon name="search" /><input type="search" value={searchInput} maxLength="100" placeholder="Search files" onChange={(event) => setSearchInput(event.target.value)} /></label>
+            <button type="button" className="button button-primary header-upload" onClick={showUploader}><Icon name="upload" /> Upload</button>
+            <span className="avatar" aria-label={`Account: ${displayName || user.email}`}>{avatarInitial}</span>
+          </header>
+
+          <main className="dashboard-main">
+            {accountError && <p className="form-error dashboard-error" role="alert">{accountError}</p>}
+            {activeView === 'dashboard' && (
+              <>
+                <section className="dashboard-page-heading" aria-labelledby="dashboard-heading"><div><p className="eyebrow">Dashboard overview</p><h2 id="dashboard-heading">Your secure workspace</h2></div><span className="secure-pill"><span><Icon name="lock" /></span> Storage protected</span></section>
+                <StorageOverview stats={stats} loading={statsLoading} refreshing={statsRefreshing} error={statsError} onRetry={() => loadStats({ background: Boolean(stats) })} />
+                <div id="upload" className="dashboard-upload-panel" ref={uploadRef}><UploadPanel onUploaded={handleUploaded} /></div>
+              </>
+            )}
+
+            <FileList
+              files={files}
+              loading={filesLoading}
+              error={filesError}
+              pagination={pagination}
+              onRetry={() => loadFiles()}
+              onUpload={showUploader}
+              onPageChange={changePage}
+              onChange={handleChanged}
+              onFavorite={handleFavorite}
+              onTrash={handleStorageMutation}
+              onRestore={handleStorageMutation}
+              onDelete={handleStorageMutation}
+              title={listContent[0]}
+              description={listContent[1]}
+              search={searchInput}
+              onSearchChange={setSearchInput}
+              sort={effectiveSort}
+              onSortChange={changeSort}
+              visibility={visibility}
+              onVisibilityChange={changeVisibility}
+              sharedOnly={activeView === 'shared'}
+              view={activeView}
+            />
+          </main>
+          <AppFooter />
         </div>
-      </header>
-
-      <main className="dashboard">
-        <section className="welcome-row" id="overview" aria-labelledby="dashboard-heading">
-          <div>
-            <p className="eyebrow">Personal dashboard</p>
-            <h1 id="dashboard-heading">Welcome back</h1>
-            <p>Manage and share your files securely.</p>
-          </div>
-          <span className="secure-pill"><span><Icon name="lock" /></span> Storage protected</span>
-        </section>
-
-        {accountError && <p className="form-error dashboard-error" role="alert">{accountError}</p>}
-
-        <StorageOverview
-          stats={stats}
-          loading={statsLoading}
-          refreshing={statsRefreshing}
-          error={statsError}
-          onRetry={() => loadStats({ background: Boolean(stats) })}
-        />
-
-        <div className="dashboard-content-grid">
-          <div id="upload" className="dashboard-upload-panel">
-            <UploadPanel onUploaded={handleUploaded} />
-          </div>
-          <aside className="dashboard-assurance" aria-labelledby="assurance-heading">
-            <span className="assurance-icon"><Icon name="check" /></span>
-            <p className="eyebrow">Private by default</p>
-            <h2 id="assurance-heading">You control every share.</h2>
-            <p>New files stay private until you explicitly make them public.</p>
-            <ul>
-              <li><Icon name="check" />Verified file contents</li>
-              <li><Icon name="check" />Short-lived downloads</li>
-              <li><Icon name="check" />Revocable public links</li>
-            </ul>
-          </aside>
-        </div>
-
-        <div id="files">
-          <FileList
-            files={files}
-            loading={filesLoading}
-            error={filesError}
-            totalFiles={stats?.totalFiles}
-            nextCursor={nextCursor}
-            loadingMore={filesLoadingMore}
-            onRetry={() => loadFiles()}
-            onLoadMore={() => loadFiles({ cursor: nextCursor, append: true })}
-            onChange={handleChanged}
-            onDelete={handleDeleted}
-          />
-        </div>
-      </main>
-
-      <AppFooter />
+      </div>
     </div>
   );
 }

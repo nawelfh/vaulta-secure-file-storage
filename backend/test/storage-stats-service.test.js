@@ -67,6 +67,15 @@ describe('authoritative storage statistics', () => {
     expect(files.getReadyStorageStats).toHaveBeenCalledTimes(1);
   });
 
+  it('accepts active counts with used bytes that still include Trash storage', async () => {
+    const { service } = harness({
+      totalFiles: '2', publicFiles: '1', privateFiles: '1', usedBytes: '6144',
+    });
+    await expect(service.getForOwner('owner-with-trash')).resolves.toMatchObject({
+      totalFiles: 2, publicFiles: 1, privateFiles: 1, usedBytes: 6144,
+    });
+  });
+
   it('calculates remaining bytes and a two-decimal percentage', async () => {
     const { service } = harness({
       totalFiles: '2', publicFiles: '1', privateFiles: '1', usedBytes: '256901120',

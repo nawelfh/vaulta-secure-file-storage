@@ -19,7 +19,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/Credentials' }
+            schema: { $ref: '#/components/schemas/Registration' }
       responses:
         '201':
           description: Account created
@@ -80,19 +80,33 @@ paths:
         - in: query
           name: limit
           schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - in: query
+          name: page
+          description: Enables numbered-page mode. The professional dashboard uses a limit of 5.
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: search
+          description: Case-insensitive literal filename search, scoped to the authenticated owner and READY files.
+          schema: { type: string, maxLength: 100 }
+        - in: query
+          name: sort
+          schema: { type: string, enum: [newest, oldest, name-asc, name-desc, size-asc, size-desc, deleted-newest, deleted-oldest] }
+        - in: query
+          name: visibility
+          schema: { type: string, enum: [PUBLIC, PRIVATE] }
+        - in: query
+          name: view
+          description: Select active files, newest-first recent files, active favorites, or Trash.
+          schema: { type: string, enum: [active, recent, favorites, trash], default: active }
       responses:
         '200':
-          description: Cursor page
+          description: A cursor page for legacy callers, or a numbered page when page/search/sort/visibility is supplied.
           content:
             application/json:
               schema:
-                type: object
-                required: [items, nextCursor]
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: '#/components/schemas/File' }
-                  nextCursor: { type: [string, 'null'], format: uuid }
+                oneOf:
+                  - $ref: '#/components/schemas/CursorFilePage'
+                  - $ref: '#/components/schemas/NumberedFilePage'
         '401': { $ref: '#/components/responses/Unauthorized' }
   /api/files/uploads:
     post:
@@ -247,13 +261,78 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
     delete:
       tags: [Files]
-      summary: Abort an upload or delete a file
+      summary: Abort an unfinished upload or permanently delete a trashed file
       security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - $ref: '#/components/parameters/FileId'
       responses:
-        '204': { description: Deleted }
+        '204': { description: Upload aborted or trashed file permanently deleted }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/files/{fileId}/favorite:
+    patch:
+      tags: [Files]
+      summary: Set persistent favorite state for an active file
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/FileId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [favorite]
+              properties:
+                favorite: { type: boolean }
+      responses:
+        '200':
+          description: Favorite state updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  file: { $ref: '#/components/schemas/File' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/files/{fileId}/trash:
+    post:
+      tags: [Files]
+      summary: Move an active READY file to Trash without deleting its object
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/FileId'
+      responses:
+        '200':
+          description: File moved to Trash
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  file: { $ref: '#/components/schemas/File' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/files/{fileId}/restore:
+    post:
+      tags: [Files]
+      summary: Restore a trashed READY file with its visibility and favorite state intact
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/FileId'
+      responses:
+        '200':
+          description: File restored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  file: { $ref: '#/components/schemas/File' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /api/files/{fileId}/download:
     get:
       tags: [Files]
@@ -279,8 +358,9 @@ paths:
       tags: [Storage]
       summary: Read the current owner's authoritative storage statistics
       description: >-
-        Counts and sums every READY file owned by the authenticated user, independent of file-list
-        pagination. UPLOADING and REJECTED records are excluded. Byte fields use binary bytes. The
+        Counts active non-trashed READY files, while usedBytes sums all READY stored objects including
+        Trash because moving a file does not delete its object. UPLOADING and REJECTED records are excluded.
+        Byte fields use binary bytes. The
         assessment-wide 1 GiB quota is reporting-only and is not an atomic upload reservation.
       security: [{ sessionCookie: [] }]
       responses:
@@ -333,11 +413,23 @@ components:
       properties:
         email: { type: string, format: email, maxLength: 254 }
         password: { type: string, minLength: 12, maxLength: 128 }
+    Registration:
+      type: object
+      additionalProperties: false
+      required: [name, email, password]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 12, maxLength: 128 }
     User:
       type: object
-      required: [id, email, createdAt]
+      required: [id, name, email, createdAt]
       properties:
         id: { type: string, format: uuid }
+        name:
+          type: [string, 'null']
+          maxLength: 100
+          description: Null only for accounts created before names were collected.
         email: { type: string, format: email }
         createdAt: { type: string, format: date-time }
     AuthResponse:
@@ -347,7 +439,7 @@ components:
         user: { $ref: '#/components/schemas/User' }
     File:
       type: object
-      required: [id, originalName, mimeType, sizeBytes, status, visibility, createdAt, updatedAt]
+      required: [id, originalName, mimeType, sizeBytes, status, visibility, favorite, trashedAt, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         originalName: { type: string }
@@ -357,8 +449,36 @@ components:
         visibility: { type: string, enum: [PRIVATE, PUBLIC] }
         rejectionReason: { type: [string, 'null'] }
         shareUrl: { type: [string, 'null'], format: uri }
+        favorite: { type: boolean }
+        trashedAt: { type: [string, 'null'], format: date-time }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    CursorFilePage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/File' }
+        nextCursor: { type: [string, 'null'], format: uuid }
+    NumberedFilePage:
+      type: object
+      required: [files, pagination]
+      properties:
+        files:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/File' }
+        pagination:
+          type: object
+          required: [page, limit, total, totalPages, hasPrevious, hasNext]
+          properties:
+            page: { type: integer, minimum: 1 }
+            limit: { type: integer, minimum: 1, maximum: 50 }
+            total: { type: integer, minimum: 0 }
+            totalPages: { type: integer, minimum: 0 }
+            hasPrevious: { type: boolean }
+            hasNext: { type: boolean }
     StorageStats:
       type: object
       additionalProperties: false
@@ -374,19 +494,19 @@ components:
         totalFiles:
           type: integer
           minimum: 0
-          description: Total READY files owned by the authenticated user.
+          description: Active non-trashed READY files owned by the authenticated user.
         publicFiles:
           type: integer
           minimum: 0
-          description: READY files whose visibility is PUBLIC.
+          description: Active non-trashed READY files whose visibility is PUBLIC.
         privateFiles:
           type: integer
           minimum: 0
-          description: READY files whose visibility is PRIVATE.
+          description: Active non-trashed READY files whose visibility is PRIVATE.
         usedBytes:
           type: integer
           minimum: 0
-          description: Sum of size_bytes for the owner's READY files, in bytes.
+          description: Sum of size_bytes for all owner READY objects including Trash, in bytes.
         quotaBytes:
           type: integer
           const: 1073741824

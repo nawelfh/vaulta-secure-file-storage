@@ -26,11 +26,11 @@ export function createAuthService({ users, sessions, sessionTtlHours }) {
   }
 
   return {
-    async register({ email, password }) {
+    async register({ name, email, password }) {
       const passwordHash = await argon2.hash(password, argonOptions);
       let user;
       try {
-        user = await users.create({ email, passwordHash });
+        user = await users.create({ name, email, passwordHash });
       } catch (error) {
         if (error.code === '23505') {
           throw new ApiError(409, 'EMAIL_ALREADY_USED', 'An account already exists for this email.');
