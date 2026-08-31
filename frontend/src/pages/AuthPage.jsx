@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { AppFooter } from '../components/AppFooter.jsx';
+import { Icon } from '../components/Icons.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { useAuth } from '../context/useAuth.js';
 
@@ -56,7 +58,8 @@ export function AuthPage({ mode }) {
   }
 
   return (
-    <main className="auth-layout">
+    <div className="auth-page-shell">
+      <main className="auth-layout">
       <section className="auth-story">
         <Logo />
 
@@ -72,17 +75,17 @@ export function AuthPage({ mode }) {
 
           <ul>
             <li>
-              <span>✓</span>
+              <span><Icon name="check" /></span>
               Private by default
             </li>
 
             <li>
-              <span>✓</span>
+              <span><Icon name="check" /></span>
               Short-lived download access
             </li>
 
             <li>
-              <span>✓</span>
+              <span><Icon name="check" /></span>
               Uploads up to 250 MB
             </li>
           </ul>
@@ -192,6 +195,8 @@ export function AuthPage({ mode }) {
           </p>
         </form>
       </section>
-    </main>
+      </main>
+      <AppFooter />
+    </div>
   );
 }

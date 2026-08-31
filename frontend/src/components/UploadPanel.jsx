@@ -8,6 +8,7 @@ import {
   SUPPORTED_FORMAT_GUIDANCE,
 } from '../utils/file-policy.js';
 import { formatBytes } from '../utils/format.js';
+import { FileTypeIcon, Icon } from './Icons.jsx';
 
 const FILE_UPLOAD_CONCURRENCY = 2;
 const ACTIVE_PHASES = new Set(['preparing', 'uploading', 'verifying']);
@@ -87,7 +88,10 @@ function QueueItem({ item, onCancel, onRemove, onRetry }) {
 
   return (
     <article className={`upload-queue-item queue-${item.status}`} data-upload-id={item.id}>
-      <span className={`file-icon file-${presentation.style}`} aria-hidden="true">{presentation.badge}</span>
+      <span className={`file-icon file-${presentation.style}`} aria-hidden="true">
+        <FileTypeIcon style={presentation.style} />
+        <small>{presentation.badge}</small>
+      </span>
       <div className="queue-file-details">
         <strong title={item.file.name}>{item.file.name}</strong>
         <span>{policy?.label || item.file.type || 'Unsupported file type'} · {formatBytes(item.file.size)}</span>
@@ -327,7 +331,7 @@ export function UploadPanel({ onUploaded }) {
         }}
       >
         <span className="upload-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" /></svg>
+          <Icon name="upload" />
         </span>
         <div>
           <strong>Drop one or more files here</strong>

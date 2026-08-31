@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../api/client.js';
 import { getStorageStats } from '../api/storage.js';
+import { AppFooter } from '../components/AppFooter.jsx';
 import { FileList } from '../components/FileList.jsx';
+import { Icon } from '../components/Icons.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { StorageOverview } from '../components/StorageOverview.jsx';
 import { UploadPanel } from '../components/UploadPanel.jsx';
@@ -152,7 +154,7 @@ export function DashboardPage() {
             <h1 id="dashboard-heading">Welcome back</h1>
             <p>Manage and share your files securely.</p>
           </div>
-          <span className="secure-pill"><span>✓</span> Storage protected</span>
+          <span className="secure-pill"><span><Icon name="lock" /></span> Storage protected</span>
         </section>
 
         {accountError && <p className="form-error dashboard-error" role="alert">{accountError}</p>}
@@ -170,14 +172,14 @@ export function DashboardPage() {
             <UploadPanel onUploaded={handleUploaded} />
           </div>
           <aside className="dashboard-assurance" aria-labelledby="assurance-heading">
-            <span className="assurance-icon" aria-hidden="true">✓</span>
+            <span className="assurance-icon"><Icon name="check" /></span>
             <p className="eyebrow">Private by default</p>
             <h2 id="assurance-heading">You control every share.</h2>
             <p>New files stay private until you explicitly make them public.</p>
             <ul>
-              <li>Verified file contents</li>
-              <li>Short-lived downloads</li>
-              <li>Revocable public links</li>
+              <li><Icon name="check" />Verified file contents</li>
+              <li><Icon name="check" />Short-lived downloads</li>
+              <li><Icon name="check" />Revocable public links</li>
             </ul>
           </aside>
         </div>
@@ -198,7 +200,7 @@ export function DashboardPage() {
         </div>
       </main>
 
-      <footer className="app-footer"><span>Vaulta</span><span>Files stay private unless you share them.</span></footer>
+      <AppFooter />
     </div>
   );
 }

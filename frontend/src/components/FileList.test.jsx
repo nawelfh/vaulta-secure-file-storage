@@ -30,17 +30,24 @@ describe('FileIcon media presentation', () => {
     ['video/mp4', 'MP4', 'file-video'],
     ['video/webm', 'WEBM', 'file-video'],
     ['video/quicktime', 'MOV', 'file-video'],
+    ['application/pdf', 'PDF', 'file-pdf'],
+    ['text/plain', 'TXT', 'file-txt'],
+    ['application/zip', 'ZIP', 'file-zip'],
+    ['application/octet-stream', 'FILE', 'file-generic'],
   ])('renders %s with the correct badge', (mimeType, badge, className) => {
     act(() => root.render(<FileIcon mimeType={mimeType} />));
     const icon = container.querySelector('.file-icon');
     expect(icon.textContent).toBe(badge);
     expect(icon.classList.contains(className)).toBe(true);
-    expect(icon.textContent).not.toBe('TXT');
+    expect(icon.querySelector('svg')).not.toBeNull();
+    expect(icon.getAttribute('aria-label')).toBe(`${badge} file type`);
+    if (mimeType !== 'text/plain') expect(icon.textContent).not.toBe('TXT');
   });
 
   it('never presents an unknown video type as text', () => {
     act(() => root.render(<FileIcon mimeType="video/example" />));
     expect(container.querySelector('.file-icon').textContent).toBe('VID');
+    expect(container.querySelector('.file-icon').classList.contains('file-video')).toBe(true);
   });
 });
 
@@ -81,5 +88,32 @@ describe('FileList dashboard totals and pagination', () => {
     ));
     expect(container.textContent).toContain('1 loaded');
     expect(container.textContent).not.toContain('1 total');
+  });
+
+  it('uses a professional SVG empty state with a real upload destination', () => {
+    act(() => root.render(
+      <FileList files={[]} totalFiles={0} onChange={vi.fn()} onDelete={vi.fn()} />,
+    ));
+
+    expect(container.textContent).toContain('No files yet');
+    expect(container.textContent).toContain('Upload your first file');
+    expect(container.textContent).not.toContain('◇');
+    expect(container.querySelector('.empty-icon svg')).not.toBeNull();
+    expect(container.querySelector('.empty-state-action').getAttribute('href')).toBe('#upload');
+  });
+
+  it('keeps every file action textually named for assistive technology', () => {
+    act(() => root.render(
+      <FileList
+        files={[{ ...file, visibility: 'PUBLIC', shareUrl: 'https://vaulta.example/share/token' }]}
+        totalFiles={1}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    ));
+
+    for (const action of container.querySelectorAll('.file-actions button')) {
+      expect(action.textContent.trim()).not.toBe('');
+    }
   });
 });

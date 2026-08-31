@@ -2,10 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../api/client.js';
 import { filePresentation } from '../utils/file-policy.js';
 import { formatBytes, formatDate } from '../utils/format.js';
+import { FileTypeIcon, Icon } from './Icons.jsx';
 
 export function FileIcon({ mimeType }) {
   const presentation = filePresentation(mimeType);
-  return <span className={`file-icon file-${presentation.style}`}>{presentation.badge}</span>;
+  return (
+    <span
+      className={`file-icon file-${presentation.style}`}
+      role="img"
+      aria-label={`${presentation.badge} file type`}
+    >
+      <FileTypeIcon style={presentation.style} />
+      <small>{presentation.badge}</small>
+    </span>
+  );
 }
 
 export function FileList({
@@ -127,16 +137,17 @@ export function FileList({
         <div className="empty-state"><span className="spinner" /><p>Loading your files…</p></div>
       ) : error && files.length === 0 ? (
         <div className="empty-state file-error-state">
-          <span className="empty-icon" aria-hidden="true">!</span>
+          <span className="empty-icon empty-icon-error"><Icon name="alert" /></span>
           <h3>Your files could not be loaded</h3>
           <p role="alert">{error}</p>
           <button type="button" className="button button-secondary" onClick={onRetry}>Retry</button>
         </div>
       ) : files.length === 0 ? (
         <div className="empty-state">
-          <span className="empty-icon" aria-hidden="true">◇</span>
-          <h3>Your vault is empty</h3>
-          <p>Upload your first file. Everything starts private.</p>
+          <span className="empty-icon"><Icon name="files" /></span>
+          <h3>No files yet</h3>
+          <p>Upload your first file to start building your Vaulta storage.</p>
+          <a className="button button-primary empty-state-action" href="#upload">Upload files</a>
         </div>
       ) : (
         <div className="file-list">
@@ -190,9 +201,7 @@ export function FileList({
         onCancel={cancelRemove}
       >
         <div className="delete-dialog-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24">
-            <path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" />
-          </svg>
+          <Icon name="trash" />
         </div>
         <p className="eyebrow">Confirm deletion</p>
         <h3 id="delete-dialog-title">Delete this file?</h3>

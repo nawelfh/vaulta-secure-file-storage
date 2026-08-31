@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiFetch } from '../api/client.js';
+import { AppFooter } from '../components/AppFooter.jsx';
+import { Icon } from '../components/Icons.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { formatBytes } from '../utils/format.js';
 
@@ -72,7 +74,7 @@ export function SharePage() {
   if (status === 'loading') {
     card = (
       <section className="share-card" aria-live="polite">
-        <span className="share-symbol" aria-hidden="true">…</span>
+        <span className="share-symbol"><span className="spinner" /></span>
         <p className="eyebrow">Secure link</p>
         <h1>Checking file availability</h1>
         <p>Vaulta is verifying that this sharing link is still active.</p>
@@ -81,7 +83,7 @@ export function SharePage() {
   } else if (status === 'unavailable') {
     card = (
       <section className="share-card" aria-live="polite">
-        <span className="share-symbol" aria-hidden="true">×</span>
+        <span className="share-symbol share-symbol-muted"><Icon name="linkOff" /></span>
         <p className="eyebrow">Link unavailable</p>
         <h1>This file is no longer available</h1>
         <p>The owner may have made the file private, removed it, or the sharing link is no longer valid.</p>
@@ -91,7 +93,7 @@ export function SharePage() {
   } else if (status === 'error') {
     card = (
       <section className="share-card" aria-live="polite">
-        <span className="share-symbol" aria-hidden="true">!</span>
+        <span className="share-symbol share-symbol-warning"><Icon name="alert" /></span>
         <p className="eyebrow">Unable to verify link</p>
         <h1>We could not check this file right now</h1>
         <p>Please try again. The link may still be valid.</p>
@@ -104,7 +106,7 @@ export function SharePage() {
     const expiryMinutes = Math.max(1, Math.round(share.downloadExpiresIn / 60));
     card = (
       <section className="share-card">
-        <span className="share-symbol" aria-hidden="true">↓</span>
+        <span className="share-symbol"><Icon name="download" /></span>
         <p className="eyebrow">Shared securely</p>
         <h1>A Vaulta user shared a file with you</h1>
         <p>
@@ -130,9 +132,12 @@ export function SharePage() {
   }
 
   return (
-    <main className="share-layout">
-      <Logo />
-      {card}
-    </main>
+    <div className="share-page-shell">
+      <main className="share-layout">
+        <Logo />
+        {card}
+      </main>
+      <AppFooter />
+    </div>
   );
 }
