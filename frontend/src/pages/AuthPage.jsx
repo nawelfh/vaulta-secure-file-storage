@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { AppFooter } from '../components/AppFooter.jsx';
 import { Icon } from '../components/Icons.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { useAuth } from '../context/useAuth.js';
@@ -245,7 +244,6 @@ export function AuthPage({ mode }) {
         </form>
       </section>
       </main>
-      <AppFooter />
     </div>
   );
 }

@@ -58,6 +58,11 @@ afterEach(() => {
 });
 
 describe('registration name', () => {
+  it.each(['login', 'register'])('does not render the application footer on the %s page', (mode) => {
+    act(() => root.render(<MemoryRouter><AuthPage mode={mode} /></MemoryRouter>));
+    expect(container.querySelector('.app-footer')).toBeNull();
+  });
+
   it('collects name and sends it only for registration', async () => {
     act(() => root.render(<MemoryRouter><AuthPage mode="register" /></MemoryRouter>));
     const values = { Name: 'Ada Lovelace', 'Email address': 'ada@example.com', Password: 'a sufficiently long password', 'Repeat password': 'a sufficiently long password' };
