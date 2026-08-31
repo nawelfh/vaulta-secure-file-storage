@@ -228,8 +228,6 @@ export function DashboardPage() {
               <h1>Welcome back{displayName ? `, ${displayName}` : ''}</h1>
               <p>Here&apos;s what&apos;s happening with your files today.</p>
             </div>
-            <label className="header-search"><span className="sr-only">Search all your files</span><Icon name="search" /><input type="search" value={searchInput} maxLength="100" placeholder="Search files" onChange={(event) => setSearchInput(event.target.value)} /></label>
-            <button type="button" className="button button-primary header-upload" onClick={showUploader}><Icon name="upload" /> Upload</button>
             <span className="avatar" aria-label={`Account: ${displayName || user.email}`}>{avatarInitial}</span>
           </header>
 

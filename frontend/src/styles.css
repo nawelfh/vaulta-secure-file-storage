@@ -505,13 +505,6 @@ h3,
   gap: 10px;
 }
 
-.header-upload {
-  min-height: 38px;
-  margin-right: 7px;
-  padding-inline: 15px;
-  font-size: .82rem;
-}
-
 .avatar {
   display: grid;
   width: 34px;
@@ -1922,10 +1915,6 @@ h3,
     height: 31px;
   }
 
-  .header-upload {
-    display: none;
-  }
-
   .account-menu {
     gap: 4px;
   }
@@ -2392,7 +2381,7 @@ h3,
   display: grid;
   min-height: 88px;
   align-items: center;
-  grid-template-columns: minmax(260px, 1fr) minmax(220px, 340px) auto auto;
+  grid-template-columns: minmax(260px, 1fr) auto;
   gap: 18px;
   border-bottom: 1px solid var(--line);
   padding: 15px 32px;
@@ -2416,14 +2405,12 @@ h3,
   font-size: .78rem;
 }
 
-.header-search,
 .toolbar-search {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-.header-search svg,
 .toolbar-search svg {
   position: absolute;
   left: 13px;
@@ -2435,7 +2422,6 @@ h3,
   pointer-events: none;
 }
 
-.header-search input,
 .toolbar-search input {
   width: 100%;
   height: 42px;
@@ -2444,19 +2430,6 @@ h3,
   padding: 0 14px 0 40px;
   color: var(--ink);
   background: #f9fbf9;
-}
-
-.header-upload {
-  gap: 8px;
-  margin: 0;
-}
-
-.header-upload svg {
-  width: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
 }
 
 .dashboard-main {
@@ -3019,7 +2992,7 @@ h3,
 
 @media (max-width: 1100px) {
   .dashboard-topbar {
-    grid-template-columns: auto minmax(200px, 1fr) minmax(190px, 280px) auto auto;
+    grid-template-columns: auto minmax(200px, 1fr) auto;
     padding-inline: 24px;
   }
 
@@ -3081,13 +3054,12 @@ h3,
 @media (max-width: 760px) {
   .dashboard-topbar {
     min-height: 72px;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 9px;
     padding: 10px 15px;
   }
 
-  .topbar-welcome p,
-  .header-search {
+  .topbar-welcome p {
     display: none;
   }
 
@@ -3097,12 +3069,6 @@ h3,
     font-size: 1rem;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .header-upload {
-    display: inline-flex;
-    min-height: 38px;
-    padding-inline: 12px;
   }
 
   .dashboard-main {
@@ -3211,16 +3177,6 @@ h3,
 }
 
 @media (max-width: 480px) {
-  .header-upload {
-    width: 39px;
-    padding: 0;
-    font-size: 0;
-  }
-
-  .header-upload svg {
-    width: 18px;
-  }
-
   .file-toolbar {
     grid-template-columns: 1fr;
   }

@@ -19,6 +19,7 @@ vi.mock('../components/FileList.jsx', () => ({
     <section data-testid="file-list" data-loading={props.loading} data-error={props.error} data-page={props.pagination.page} data-total={props.pagination.total} data-view={props.view}>
       <h2>{props.title}</h2><span>{props.files.map((file) => file.originalName).join(',')}</span><span>{props.description}</span>
       <input aria-label="Table search" value={props.search} onChange={(event) => props.onSearchChange(event.target.value)} />
+      <button type="button" onClick={props.onUpload}>Open uploader</button>
       <button type="button" onClick={() => props.onPageChange(2)}>Page 2</button>
       <button type="button" onClick={() => props.onSortChange('size-desc')}>Sort largest</button>
       <button type="button" onClick={() => props.onVisibilityChange('PRIVATE')}>Private filter</button>
@@ -119,6 +120,16 @@ describe('DashboardPage identity and structure', () => {
     expect(container.querySelector('.mobile-menu-button').getAttribute('aria-controls')).toBe('dashboard-navigation');
   });
 
+  it('keeps the responsive identity header free of duplicate search and upload controls', async () => {
+    renderDashboard(); await flush();
+    const header = container.querySelector('.dashboard-topbar');
+    expect(header.querySelector('input[type="search"]')).toBeNull();
+    expect([...header.querySelectorAll('button')].some((button) => button.textContent.trim() === 'Upload')).toBe(false);
+    expect(header.querySelector('[aria-label="Open navigation"]')).not.toBeNull();
+    expect(header.querySelector('[aria-label="Account: Ada Lovelace"]')).not.toBeNull();
+    expect(header.textContent).toContain('Welcome back, Ada Lovelace');
+  });
+
   it('shows truthful public-owner content in Shared view', async () => {
     renderDashboard({ path: '/dashboard?view=shared' }); await flush();
     expect(container.querySelector('[data-testid="file-list"]').textContent).toContain('Shared Files');
@@ -156,7 +167,7 @@ describe('DashboardPage file controls', () => {
   it('debounces synchronized search by 300ms and resets to page one', async () => {
     vi.useFakeTimers();
     renderDashboard(); await flush();
-    const input = container.querySelector('.header-search input');
+    const input = container.querySelector('[aria-label="Table search"]');
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'Budget');
       input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -209,7 +220,9 @@ describe('DashboardPage file controls', () => {
 
   it('focuses the real uploader and applies mutation-specific stats refresh semantics', async () => {
     renderDashboard(); await flush();
-    await click('Upload');
+    expect(container.querySelector('[data-testid="upload-panel"]')).not.toBeNull();
+    expect([...container.querySelectorAll('[data-testid="upload-panel"] button')].some((button) => button.textContent === 'Browse files')).toBe(true);
+    await click('Open uploader');
     expect(document.activeElement.textContent).toBe('Browse files');
     await click('Complete upload'); await flush();
     expect(getStorageStats).toHaveBeenCalledTimes(2);
