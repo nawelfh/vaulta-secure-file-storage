@@ -13,6 +13,7 @@ import { FileTypeIcon, Icon } from './Icons.jsx';
 const FILE_UPLOAD_CONCURRENCY = 2;
 const ACTIVE_PHASES = new Set(['preparing', 'uploading', 'verifying']);
 const REMOVABLE_STATUSES = new Set(['waiting', 'failed', 'cancelled', 'complete']);
+const FINISHED_STATUSES = new Set(['failed', 'cancelled', 'complete']);
 let fallbackQueueId = 0;
 
 function createQueueId() {
@@ -153,6 +154,8 @@ export function UploadPanel({ onUploaded }) {
   const [items, setItems] = useState([]);
   const [dragging, setDragging] = useState(false);
   const [queueRunning, setQueueRunning] = useState(false);
+  const [managerOpen, setManagerOpen] = useState(false);
+  const [managerExpanded, setManagerExpanded] = useState(true);
 
   useEffect(() => {
     onUploadedRef.current = onUploaded;
@@ -184,6 +187,9 @@ export function UploadPanel({ onUploaded }) {
   function addFiles(fileList) {
     const incoming = Array.from(fileList || []);
     if (incoming.length === 0) return;
+
+    setManagerOpen(true);
+    setManagerExpanded(true);
 
     replaceItems((current) => {
       const identities = new Set(current.map((item) => fileIdentity(item.file)));
@@ -305,96 +311,144 @@ export function UploadPanel({ onUploaded }) {
     scheduleQueue();
   }
 
+  function closeManager() {
+    if (!itemsRef.current.every((item) => FINISHED_STATUSES.has(item.status))) return;
+    pendingRef.current = [];
+    replaceItems(() => []);
+    setManagerOpen(false);
+    setManagerExpanded(true);
+  }
+
   const waitingCount = items.filter((item) => item.status === 'waiting').length;
   const completeCount = items.filter((item) => item.status === 'complete').length;
   const activeCount = items.filter((item) => ACTIVE_PHASES.has(item.status)).length;
+  const canCloseManager = items.length > 0 && items.every((item) => FINISHED_STATUSES.has(item.status));
 
   return (
-    <section className="upload-card" aria-labelledby="upload-heading">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">New uploads</p>
-          <h2 id="upload-heading">Add files to your vault</h2>
-        </div>
-        <span className="security-note">Private by default</span>
-      </div>
-
-      <div
-        className={`drop-zone${dragging ? ' is-dragging' : ''}`}
-        onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
-        onDragOver={(event) => event.preventDefault()}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(event) => {
-          event.preventDefault();
-          setDragging(false);
-          addFiles(event.dataTransfer.files);
-        }}
-      >
-        <span className="upload-icon" aria-hidden="true">
-          <Icon name="upload" />
-        </span>
-        <div>
-          <strong>Drop one or more files here</strong>
-          <p>{SUPPORTED_FORMAT_GUIDANCE}</p>
-        </div>
-        <button
-          className="button button-secondary file-button"
-          type="button"
-          onClick={() => {
-            if (!inputRef.current) return;
-            inputRef.current.value = '';
-            inputRef.current.click();
-          }}
-        >
-          Browse files
-        </button>
-        <input
-          ref={inputRef}
-          className="file-input"
-          type="file"
-          accept={FILE_INPUT_ACCEPT}
-          multiple
-          tabIndex={-1}
-          aria-label="Choose one or more files to upload"
-          onChange={(event) => {
-            addFiles(event.target.files);
-            event.target.value = '';
-          }}
-        />
-      </div>
-
-      {items.length > 0 && (
-        <div className="upload-queue" aria-label="Files selected for upload">
-          <div className="queue-summary" role="status" aria-live="polite">
-            <span>{items.length} {items.length === 1 ? 'file' : 'files'} in queue</span>
-            <span>{completeCount} complete{activeCount ? ` · ${activeCount} active` : ''}</span>
+    <>
+      <section className="upload-card" aria-labelledby="upload-heading">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">New uploads</p>
+            <h2 id="upload-heading">Add files to your vault</h2>
           </div>
-          {items.map((item) => (
-            <QueueItem
-              key={item.id}
-              item={item}
-              onCancel={cancel}
-              onRemove={remove}
-              onRetry={retry}
-            />
-          ))}
+          <span className="security-note">Private by default</span>
         </div>
-      )}
 
-      <div className="upload-actions">
-        {items.length === 0 && <p className="upload-hint">Choose one or more supported files to begin.</p>}
-        {items.length > 0 && waitingCount === 0 && !queueRunning && (
-          <p className="upload-hint">Add more files, retry an item, or remove completed entries.</p>
-        )}
-        <button
-          className="button button-primary"
-          type="button"
-          disabled={waitingCount === 0 || queueRunning}
-          onClick={uploadAll}
+        <div
+          className={`drop-zone${dragging ? ' is-dragging' : ''}`}
+          onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            addFiles(event.dataTransfer.files);
+          }}
         >
-          {queueRunning ? 'Upload queue running…' : 'Upload all'}
-        </button>
-      </div>
-    </section>
+          <span className="upload-icon" aria-hidden="true">
+            <Icon name="upload" />
+          </span>
+          <div>
+            <strong>Drop one or more files here</strong>
+            <p>{SUPPORTED_FORMAT_GUIDANCE}</p>
+          </div>
+          <button
+            className="button button-secondary file-button"
+            type="button"
+            onClick={() => {
+              if (!inputRef.current) return;
+              inputRef.current.value = '';
+              inputRef.current.click();
+            }}
+          >
+            Browse files
+          </button>
+          <input
+            ref={inputRef}
+            className="file-input"
+            type="file"
+            accept={FILE_INPUT_ACCEPT}
+            multiple
+            tabIndex={-1}
+            aria-label="Choose one or more files to upload"
+            onChange={(event) => {
+              addFiles(event.target.files);
+              event.target.value = '';
+            }}
+          />
+        </div>
+      </section>
+
+      {managerOpen && items.length > 0 && (
+        <aside
+          className={`upload-manager${managerExpanded ? '' : ' is-collapsed'}`}
+          aria-label="Upload manager"
+        >
+          <div className="upload-manager-header">
+            <div className="upload-manager-heading">
+              <strong>Uploads</strong>
+              <span role="status" aria-live="polite">
+                {completeCount} of {items.length} complete{activeCount ? ` · ${activeCount} active` : ''}
+              </span>
+            </div>
+            <div className="upload-manager-controls">
+              <button
+                type="button"
+                className="upload-manager-icon-button upload-manager-toggle"
+                aria-label={managerExpanded ? 'Collapse upload manager' : 'Expand upload manager'}
+                aria-expanded={managerExpanded}
+                aria-controls="upload-manager-content"
+                onClick={() => setManagerExpanded((expanded) => !expanded)}
+              >
+                <Icon name="chevronRight" />
+              </button>
+              <button
+                type="button"
+                className="upload-manager-icon-button"
+                aria-label="Close upload manager"
+                disabled={!canCloseManager}
+                title={canCloseManager ? 'Close upload manager' : 'Finish or cancel queued uploads before closing'}
+                onClick={closeManager}
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+          </div>
+
+          {managerExpanded && (
+            <div id="upload-manager-content" className="upload-manager-content">
+              <div className="upload-queue" aria-label="Files selected for upload">
+                {items.map((item) => (
+                  <QueueItem
+                    key={item.id}
+                    item={item}
+                    onCancel={cancel}
+                    onRemove={remove}
+                    onRetry={retry}
+                  />
+                ))}
+              </div>
+
+              <div className="upload-manager-actions">
+                <p className="upload-hint">
+                  {waitingCount > 0
+                    ? `${waitingCount} ${waitingCount === 1 ? 'file' : 'files'} ready to upload.`
+                    : 'Add more files, retry an item, or remove completed entries.'}
+                </p>
+                <button
+                  className="button button-primary"
+                  type="button"
+                  disabled={waitingCount === 0 || queueRunning}
+                  onClick={uploadAll}
+                >
+                  {queueRunning ? 'Uploading…' : 'Upload all'}
+                </button>
+              </div>
+            </div>
+          )}
+        </aside>
+      )}
+    </>
   );
 }

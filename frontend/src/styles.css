@@ -1043,6 +1043,156 @@ h3,
   background: white;
 }
 
+.upload-manager {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 9;
+  display: flex;
+  overflow: hidden;
+  width: min(440px, calc(100vw - 48px));
+  max-height: min(70vh, 620px);
+  flex-direction: column;
+  border: 1px solid #dbe3dd;
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 22px 54px rgba(20, 43, 31, .2);
+}
+
+.upload-manager.is-collapsed {
+  width: min(410px, calc(100vw - 48px));
+}
+
+.upload-manager-header {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px 12px 18px;
+  color: white;
+  background: var(--green-dark);
+}
+
+.upload-manager-heading {
+  min-width: 0;
+}
+
+.upload-manager-heading strong,
+.upload-manager-heading span {
+  display: block;
+}
+
+.upload-manager-heading strong {
+  margin-bottom: 2px;
+  font-size: .95rem;
+  letter-spacing: -.015em;
+}
+
+.upload-manager-heading span {
+  overflow: hidden;
+  color: #c9ddd2;
+  font-size: .75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-manager-controls {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.upload-manager-icon-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  padding: 0;
+  color: white;
+  background: transparent;
+  cursor: pointer;
+}
+
+.upload-manager-icon-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, .13);
+}
+
+.upload-manager-icon-button:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+}
+
+.upload-manager-icon-button svg {
+  width: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.upload-manager-toggle svg {
+  transition: transform 150ms ease;
+}
+
+.upload-manager-toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.upload-manager-content {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.upload-manager .upload-queue {
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: min(48vh, 400px);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.upload-manager .upload-queue-item {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  padding: 13px 15px;
+}
+
+.upload-manager .queue-status {
+  grid-column: 2;
+}
+
+.upload-manager .queue-progress,
+.upload-manager .queue-error {
+  grid-column: 2 / 4;
+}
+
+.upload-manager .queue-item-actions {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.upload-manager-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  padding: 12px 14px;
+  background: #fafcfa;
+}
+
+.upload-manager-actions .button {
+  min-height: 38px;
+  flex: 0 0 auto;
+  padding-inline: 16px;
+}
+
 .queue-summary {
   display: flex;
   align-items: center;
@@ -1894,6 +2044,51 @@ h3,
   }
 
   .upload-actions .button {
+    width: 100%;
+  }
+
+  .upload-manager,
+  .upload-manager.is-collapsed {
+    right: 14px;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    left: 14px;
+    width: auto;
+    max-height: calc(100dvh - 28px - env(safe-area-inset-bottom));
+    border-radius: 16px 16px 12px 12px;
+  }
+
+  .upload-manager-header {
+    min-height: 60px;
+    padding-inline: 16px 10px;
+  }
+
+  .upload-manager .upload-queue {
+    max-height: min(56dvh, 480px);
+  }
+
+  .upload-manager .upload-queue-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .upload-manager .queue-status,
+  .upload-manager .queue-progress,
+  .upload-manager .queue-error,
+  .upload-manager .queue-item-actions {
+    grid-column: 2;
+    grid-row: auto;
+  }
+
+  .upload-manager .queue-item-actions {
+    justify-content: flex-start;
+  }
+
+  .upload-manager-actions {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .upload-manager-actions .button {
     width: 100%;
   }
 

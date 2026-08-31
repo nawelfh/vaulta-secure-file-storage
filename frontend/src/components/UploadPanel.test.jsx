@@ -21,6 +21,10 @@ function button(label, scope = container) {
   return [...scope.querySelectorAll('button')].find((element) => element.textContent === label);
 }
 
+function control(label, scope = container) {
+  return scope.querySelector(`button[aria-label="${label}"]`);
+}
+
 function file(name = 'report.pdf', type = 'application/pdf', contents = 'file contents', lastModified = 1) {
   return new File([contents], name, { type, lastModified });
 }
@@ -98,6 +102,30 @@ describe('UploadPanel queue intake', () => {
     expect(queueItems()).toHaveLength(1);
     expect(queueItem('report.pdf').textContent).toContain('Waiting');
     expect(uploadFile).not.toHaveBeenCalled();
+  });
+
+  it('opens a responsive floating manager without expanding the upload card inline', () => {
+    select(file());
+
+    const manager = container.querySelector('aside.upload-manager[aria-label="Upload manager"]');
+    expect(manager).toBeTruthy();
+    expect(manager.parentElement).toBe(container);
+    expect(container.querySelector('.upload-card .upload-queue')).toBeNull();
+    expect(manager.querySelector('#upload-manager-content')).toBeTruthy();
+    expect(control('Collapse upload manager').getAttribute('aria-expanded')).toBe('true');
+    expect(manager.textContent).toContain('0 of 1 complete');
+  });
+
+  it('expands the manager automatically when another file is selected or dropped', () => {
+    select(file('one.pdf'));
+    act(() => control('Collapse upload manager').click());
+    expect(container.querySelector('#upload-manager-content')).toBeNull();
+
+    drop(file('two.pdf'));
+
+    expect(container.querySelector('#upload-manager-content')).toBeTruthy();
+    expect(queueItems()).toHaveLength(2);
+    expect(control('Collapse upload manager')).toBeTruthy();
   });
 
   it('adds multiple selected files as separate queue entries', () => {
@@ -289,6 +317,39 @@ describe('UploadPanel queue scheduling and lifecycle', () => {
     });
 
     expect(operations).toHaveLength(2);
+  });
+
+  it('collapses and expands without cancelling active uploads', () => {
+    const operations = deferredUploads();
+    select(file('one.pdf'));
+    act(() => button('Upload all').click());
+
+    expect(control('Close upload manager').disabled).toBe(true);
+    act(() => control('Collapse upload manager').click());
+
+    expect(operations[0].options.signal.aborted).toBe(false);
+    expect(container.querySelector('#upload-manager-content')).toBeNull();
+    expect(control('Expand upload manager').getAttribute('aria-expanded')).toBe('false');
+
+    act(() => control('Expand upload manager').click());
+    expect(queueItem('one.pdf').textContent).toContain('Preparing upload');
+    expect(operations[0].options.signal.aborted).toBe(false);
+  });
+
+  it('allows the manager to close only after every operation is finished', async () => {
+    const operations = deferredUploads();
+    select(file('one.pdf'));
+
+    expect(control('Close upload manager').disabled).toBe(true);
+    act(() => button('Upload all').click());
+    expect(control('Close upload manager').disabled).toBe(true);
+
+    await act(async () => operations[0].resolve({ id: 'one' }));
+    expect(control('Close upload manager').disabled).toBe(false);
+
+    act(() => control('Close upload manager').click());
+    expect(container.querySelector('.upload-manager')).toBeNull();
+    expect(operations[0].options.signal.aborted).toBe(false);
   });
 
   it('removes a waiting entry without disturbing its neighbor', () => {
