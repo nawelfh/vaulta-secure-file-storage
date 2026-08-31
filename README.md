@@ -284,6 +284,14 @@ For production, also use:
 
 Set `S3_ENDPOINT` only when using a compatible local provider such as MinIO. Set `S3_SSE=AES256` when server-side encryption is not already enforced by the bucket.
 
+## Authentication responsiveness
+
+Successful login returns the safe authenticated-user projection and hydrates frontend auth state directly. `/api/auth/me` remains the authority for restoring an existing session after a full-page load, but it is not repeated after login. The dashboard shell renders before its independent file and storage-stat requests finish.
+
+Login uses a 45-second client timeout to accommodate an idle hosted service without spinning indefinitely. After three seconds, the form displays delayed idle-service guidance; network, timeout, and invalid-credential failures remain distinct and safe to retry. Unknown-email verification still performs Argon2id work against a precomputed valid dummy hash, avoiding process-start hashing without weakening enumeration resistance.
+
+Application changes cannot eliminate a hosting provider's process sleep, database wake-up, DNS, or TLS latency. For predictable production sign-in latency, use an always-on backend tier and place the backend and PostgreSQL service in the same or nearby region. Do not add a frontend health-check request before login, because that adds another round trip.
+
 ## Engineering scope
 
 The project is intentionally compact enough for a take-home assignment while implementing the core requirements to a production-minded standard.

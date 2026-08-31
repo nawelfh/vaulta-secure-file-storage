@@ -21,7 +21,7 @@ function testApp() {
       sessionToken: 'new-session', csrfToken: 'new-csrf', expiresAt: new Date('2026-02-01'),
     })),
     login: vi.fn(async (input) => ({
-      user: { id: 'user-a', name: null, email: input.email, createdAt: new Date('2025-01-01') },
+      user: { id: 'user-a', name: null, email: input.email, passwordHash: 'must-not-leak', createdAt: new Date('2025-01-01') },
       sessionToken: 'login-session', csrfToken: 'login-csrf', expiresAt: new Date('2026-02-01'),
     })),
     logout: vi.fn(),
@@ -92,7 +92,8 @@ describe('HTTP security boundaries', () => {
 
     const login = await request(app).post('/api/auth/login').send({ email: 'old@example.com', password: 'a sufficiently long password' });
     expect(login.status).toBe(200);
-    expect(login.body.user.name).toBeNull();
+    expect(login.body.user).toEqual({ id: 'user-a', name: null, email: 'old@example.com', createdAt: '2025-01-01T00:00:00.000Z' });
+    expect(login.body.user).not.toHaveProperty('passwordHash');
   });
   it('rejects private file access without authentication', async () => {
     const { app } = testApp();

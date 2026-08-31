@@ -85,6 +85,18 @@ afterEach(() => {
 });
 
 describe('DashboardPage identity and structure', () => {
+  it('renders the usable shell while independent stats and file requests remain pending', async () => {
+    getFiles.mockReturnValue(new Promise(() => {}));
+    getStorageStats.mockReturnValue(new Promise(() => {}));
+    renderDashboard();
+    await flush();
+    expect(container.textContent).toContain('Welcome back, Ada Lovelace');
+    expect(container.querySelector('[data-testid="upload-panel"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="file-list"]').dataset.loading).toBe('true');
+    expect(getFiles).toHaveBeenCalledTimes(1);
+    expect(getStorageStats).toHaveBeenCalledTimes(1);
+  });
+
   it('renders the real user name and name initial', async () => {
     renderDashboard(); await flush();
     expect(container.textContent).toContain('Welcome back, Ada Lovelace');

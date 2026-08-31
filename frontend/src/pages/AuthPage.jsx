@@ -1,9 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { AppFooter } from '../components/AppFooter.jsx';
 import { Icon } from '../components/Icons.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { useAuth } from '../context/useAuth.js';
+
+const SLOW_LOGIN_DELAY_MS = 3_000;
+
+function authErrorMessage(error) {
+  if (error.code === 'INVALID_CREDENTIALS') return 'Invalid email or password.';
+  if (error.code === 'REQUEST_TIMEOUT') return 'The secure service took too long to respond. Please try again.';
+  if (error.code === 'NETWORK_ERROR' || error.status >= 500) return 'Vaulta could not reach the secure service. Please try again.';
+  return error.message;
+}
 
 export function AuthPage({ mode }) {
   const isRegister = mode === 'register';
@@ -18,7 +27,12 @@ export function AuthPage({ mode }) {
   });
 
   const [submitting, setSubmitting] = useState(false);
+  const [slowLogin, setSlowLogin] = useState(false);
   const [error, setError] = useState('');
+  const submittingRef = useRef(false);
+  const slowTimerRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(slowTimerRef.current), []);
 
   if (!loading && user) {
     return <Navigate to="/dashboard" replace />;
@@ -35,14 +49,20 @@ export function AuthPage({ mode }) {
 
   async function submit(event) {
     event.preventDefault();
+    if (submittingRef.current) return;
 
     if (isRegister && form.password !== form.confirmPassword) {
       setError('The passwords do not match.');
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
+    setSlowLogin(false);
     setError('');
+    if (!isRegister) {
+      slowTimerRef.current = setTimeout(() => setSlowLogin(true), SLOW_LOGIN_DELAY_MS);
+    }
 
     try {
       await authenticate(mode, {
@@ -53,9 +73,13 @@ export function AuthPage({ mode }) {
 
       navigate('/dashboard', { replace: true });
     } catch (submitError) {
-      setError(submitError.message);
+      setError(authErrorMessage(submitError));
     } finally {
+      clearTimeout(slowTimerRef.current);
+      slowTimerRef.current = null;
+      submittingRef.current = false;
       setSubmitting(false);
+      setSlowLogin(false);
     }
   }
 
@@ -195,12 +219,19 @@ export function AuthPage({ mode }) {
             disabled={submitting}
             type="submit"
           >
-            {submitting
-              ? 'Please wait…'
-              : isRegister
-                ? 'Create account'
-                : 'Sign in'}
+            <span className="auth-submit-content">
+              {submitting && <span className="auth-button-spinner" aria-hidden="true" />}
+              {submitting
+                ? isRegister ? 'Creating account…' : 'Signing in…'
+                : isRegister ? 'Create account' : 'Sign in'}
+            </span>
           </button>
+
+          {!isRegister && slowLogin && (
+            <p className="auth-slow-message" role="status">
+              The secure service may be waking from an idle state. This can take a few seconds.
+            </p>
+          )}
 
           <p className="auth-switch">
             {isRegister

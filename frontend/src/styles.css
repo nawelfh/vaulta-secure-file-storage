@@ -394,6 +394,32 @@ h3,
   min-height: 48px;
 }
 
+.auth-submit-content {
+  display: inline-flex;
+  min-width: 126px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+
+.auth-button-spinner {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border: 2px solid rgba(255, 255, 255, .45);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+.auth-slow-message {
+  margin: 12px 4px 0;
+  color: var(--muted);
+  font-size: .82rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
 .auth-switch {
   margin: 24px 0 0;
   color: var(--muted);

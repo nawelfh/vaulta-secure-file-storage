@@ -9,7 +9,7 @@ const argonOptions = {
   parallelism: 1,
 };
 
-const dummyHashPromise = argon2.hash('timing-only-password-value', argonOptions);
+export const DUMMY_PASSWORD_HASH = '$argon2id$v=19$m=19456,p=1,t=2$uNaECBWKJt6YVFbT1tDdSw$fob54OZzCzqHImTU4xJMfw4Q684CkYpgR6HHkxnN/sw';
 
 export function createAuthService({ users, sessions, sessionTtlHours }) {
   async function issueSession(userId) {
@@ -42,7 +42,7 @@ export function createAuthService({ users, sessions, sessionTtlHours }) {
 
     async login({ email, password }) {
       const user = await users.findByEmail(email);
-      const candidateHash = user?.passwordHash || await dummyHashPromise;
+      const candidateHash = user?.passwordHash || DUMMY_PASSWORD_HASH;
       const valid = await argon2.verify(candidateHash, password);
       if (!user || !valid) {
         throw new ApiError(401, 'INVALID_CREDENTIALS', 'The email or password is incorrect.');

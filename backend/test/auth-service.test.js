@@ -1,6 +1,6 @@
 import argon2 from 'argon2';
 import { describe, expect, it, vi } from 'vitest';
-import { createAuthService } from '../src/services/auth-service.js';
+import { createAuthService, DUMMY_PASSWORD_HASH } from '../src/services/auth-service.js';
 import { sha256 } from '../src/utils/crypto.js';
 
 function harness(existingUser = null) {
@@ -34,14 +34,33 @@ describe('authentication service', () => {
   });
 
   it('returns one generic error for unknown users and wrong passwords', async () => {
+    expect(await argon2.verify(DUMMY_PASSWORD_HASH, 'timing-only-password-value')).toBe(true);
+    const verify = vi.spyOn(argon2, 'verify');
     const unknown = harness();
     await expect(unknown.service.login({ email: 'missing@example.com', password: 'anything at all' }))
-      .rejects.toMatchObject({ status: 401, code: 'INVALID_CREDENTIALS' });
+      .rejects.toMatchObject({ status: 401, code: 'INVALID_CREDENTIALS', message: 'The email or password is incorrect.' });
+    expect(verify).toHaveBeenCalledWith(DUMMY_PASSWORD_HASH, 'anything at all');
 
     const passwordHash = await argon2.hash('right password');
     const known = harness({ id: 'user-1', email: 'user@example.com', passwordHash });
     await expect(known.service.login({ email: 'user@example.com', password: 'wrong password' }))
-      .rejects.toMatchObject({ status: 401, code: 'INVALID_CREDENTIALS' });
+      .rejects.toMatchObject({ status: 401, code: 'INVALID_CREDENTIALS', message: 'The email or password is incorrect.' });
+    verify.mockRestore();
+  });
+
+  it('returns the authenticated user and persists a hashed session on valid login', async () => {
+    const user = {
+      id: 'user-1', name: 'Ada', email: 'user@example.com', passwordHash: DUMMY_PASSWORD_HASH, createdAt: new Date(),
+    };
+    const { service, sessions } = harness(user);
+    const result = await service.login({ email: user.email, password: 'timing-only-password-value' });
+    expect(result.user).toBe(user);
+    expect(sessions.create).toHaveBeenCalledWith(expect.objectContaining({
+      userId: user.id,
+      tokenHash: sha256(result.sessionToken),
+      csrfHash: sha256(result.csrfToken),
+      expiresAt: expect.any(Date),
+    }));
   });
 
   it('resolves and revokes sessions by a SHA-256 token hash', async () => {

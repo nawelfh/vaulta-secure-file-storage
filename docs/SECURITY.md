@@ -9,7 +9,7 @@ The application protects account credentials, session secrets, private file byte
 ### Authentication
 
 - Passwords are hashed with Argon2id (`m=19456 KiB`, `t=2`, `p=1`).
-- Login errors do not reveal whether the email exists. A dummy Argon2 verification reduces timing differences for unknown emails.
+- Login errors do not reveal whether the email exists. Unknown emails are checked against a valid precomputed Argon2id dummy hash, preserving verification work without performing an expensive hash during process startup.
 - Session and CSRF tokens contain 256 bits of randomness. Only SHA-256 hashes are stored in PostgreSQL.
 - The session cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` in production. Sessions expire and can be revoked at logout.
 - Authentication endpoints and the API as a whole are rate limited.
