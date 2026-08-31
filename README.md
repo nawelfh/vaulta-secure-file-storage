@@ -182,7 +182,8 @@ The credentials provided in `.env.example` are intended only for local developme
 | `GET` | `/api/files/:id/download` | Owner | Obtain a short-lived download URL |
 | `DELETE` | `/api/files/:id` | Owner + CSRF | Abort an upload or permanently delete a trashed file |
 | `GET` | `/api/storage/stats` | Owner | Read authoritative READY-file counts and byte usage |
-| `GET` | `/api/public/:shareToken` | Public | Redirect to a short-lived download URL |
+| `GET` | `/api/public/:shareToken` | Public | Read public file metadata without exposing storage details |
+| `GET` | `/api/public/:shareToken/download` | Public | Obtain a short-lived signed download URL |
 
 All API errors use the following structure:
 
@@ -236,9 +237,9 @@ A filename or browser-provided MIME type alone is never considered sufficient pr
 
 ### Public sharing
 
-The storage bucket is never public. Public access uses an unguessable application share token. The token can be revoked by switching the file back to private.
+The storage bucket is never public. Public access uses an unguessable application share token. `GET /api/public/:shareToken` returns only the public filename, MIME type, size, and configured download-expiry duration. The separate `/download` endpoint authorizes the transfer and returns a short-lived signed object-storage URL.
 
-After authorization, the backend creates a presigned object-storage download URL that expires after five minutes. This prevents the application from exposing permanent storage URLs or private object keys.
+The signed download URL expires after five minutes. Invalid token formats receive a structured validation error, while unknown, private, or trashed files are reported as unavailable without exposing their state. Making a file private revokes its application share token; an already-issued signed storage URL can remain usable only until its short expiry. This prevents the application from exposing permanent storage URLs or private object keys.
 
 ## Interface behavior
 

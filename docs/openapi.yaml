@@ -377,18 +377,45 @@ paths:
   /api/public/{shareToken}:
     get:
       tags: [Public]
-      summary: Redirect a valid public token to a short-lived download URL
+      summary: Read metadata for an available public file
       parameters:
         - in: path
           name: shareToken
           required: true
           schema: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
       responses:
-        '302':
-          description: Temporary redirect
-          headers:
-            Location: { schema: { type: string, format: uri } }
+        '200':
+          description: Public file metadata
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicFileMetadata' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/public/{shareToken}/download:
+    get:
+      tags: [Public]
+      summary: Create a short-lived signed download URL for an available public file
+      parameters:
+        - in: path
+          name: shareToken
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+      responses:
+        '200':
+          description: Authorized signed download
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [url, expiresIn]
+                properties:
+                  url: { type: string, format: uri }
+                  expiresIn: { type: integer, example: 300 }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 components:
   securitySchemes:
     sessionCookie:
@@ -453,6 +480,15 @@ components:
         trashedAt: { type: [string, 'null'], format: date-time }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    PublicFileMetadata:
+      type: object
+      additionalProperties: false
+      required: [originalName, mimeType, sizeBytes, downloadExpiresIn]
+      properties:
+        originalName: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer }
+        downloadExpiresIn: { type: integer, example: 300 }
     CursorFilePage:
       type: object
       required: [items, nextCursor]
@@ -555,6 +591,11 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
     ValidationError:
       description: Request validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Too many public file requests
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
