@@ -5,6 +5,7 @@ import { createPool } from './db/pool.js';
 import { createRepositories } from './db/repositories.js';
 import { createAuthService } from './services/auth-service.js';
 import { createFileService } from './services/file-service.js';
+import { createStorageStatsService } from './services/storage-stats-service.js';
 import { createS3Storage } from './storage/s3-storage.js';
 
 const config = loadConfig();
@@ -17,7 +18,8 @@ const authService = createAuthService({
   sessionTtlHours: config.sessionTtlHours,
 });
 const fileService = createFileService({ files: repositories.files, storage, config });
-const app = createApp({ config, authService, fileService, pool, logger });
+const storageStatsService = createStorageStatsService({ files: repositories.files });
+const app = createApp({ config, authService, fileService, storageStatsService, pool, logger });
 
 const server = app.listen(config.port, () => {
   logger.info({ port: config.port }, 'Secure file storage API started');

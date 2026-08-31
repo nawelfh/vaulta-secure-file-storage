@@ -176,6 +176,7 @@ The credentials provided in `.env.example` are intended only for local developme
 | `PATCH` | `/api/files/:id` | Owner + CSRF | Change public/private visibility |
 | `GET` | `/api/files/:id/download` | Owner | Obtain a short-lived download URL |
 | `DELETE` | `/api/files/:id` | Owner + CSRF | Abort an upload or delete a file |
+| `GET` | `/api/storage/stats` | Owner | Read authoritative READY-file counts and byte usage |
 | `GET` | `/api/public/:shareToken` | Public | Redirect to a short-lived download URL |
 
 All API errors use the following structure:
@@ -191,6 +192,11 @@ All API errors use the following structure:
 ```
 
 See [`docs/openapi.yaml`](docs/openapi.yaml) for the complete request and response schemas.
+
+Storage statistics are calculated from all of the authenticated owner's `READY` database records,
+not from a paginated frontend file list. `UPLOADING` and `REJECTED` records are excluded. The API
+reports a single assessment-wide quota of 1 GiB (1,073,741,824 bytes); this quota is informational
+until a future atomic upload-reservation mechanism can enforce it safely across concurrent uploads.
 
 ## Security design
 
@@ -277,7 +283,7 @@ Potential production extensions include:
 
 - antivirus or Content Disarm and Reconstruction processing;
 - password reset;
-- storage quotas;
+- atomic storage-quota reservations and enforcement;
 - object versioning;
 - account deletion;
 - distributed rate-limit storage;

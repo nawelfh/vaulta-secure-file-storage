@@ -95,6 +95,26 @@ export function createRepositories(pool) {
     },
 
     files: {
+      async getReadyStorageStats(ownerId) {
+        const result = await pool.query(
+          `SELECT COUNT(*) AS total_files,
+                  COUNT(*) FILTER (WHERE visibility = 'PUBLIC') AS public_files,
+                  COUNT(*) FILTER (WHERE visibility = 'PRIVATE') AS private_files,
+                  COALESCE(SUM(size_bytes), 0) AS used_bytes
+             FROM files
+            WHERE owner_id = $1
+              AND status = 'READY'`,
+          [ownerId],
+        );
+        const row = result.rows[0];
+        return {
+          totalFiles: row.total_files,
+          publicFiles: row.public_files,
+          privateFiles: row.private_files,
+          usedBytes: row.used_bytes,
+        };
+      },
+
       async createUpload(file) {
         const result = await pool.query(
           `INSERT INTO files(

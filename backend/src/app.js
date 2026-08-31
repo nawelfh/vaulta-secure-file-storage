@@ -10,9 +10,10 @@ import { errorHandler, notFound } from './middleware/error-handler.js';
 import { createAuthRouter } from './routes/auth-routes.js';
 import { createFileRouter } from './routes/file-routes.js';
 import { createPublicRouter } from './routes/public-routes.js';
+import { createStorageRouter } from './routes/storage-routes.js';
 import { ApiError } from './utils/api-error.js';
 
-export function createApp({ config, authService, fileService, pool, logger }) {
+export function createApp({ config, authService, fileService, storageStatsService, pool, logger }) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
@@ -66,6 +67,7 @@ export function createApp({ config, authService, fileService, pool, logger }) {
   });
   app.use('/api/auth', createAuthRouter({ authService, auth, config }));
   app.use('/api/files', createFileRouter({ fileService, auth }));
+  app.use('/api/storage', createStorageRouter({ storageStatsService, auth }));
   app.use('/api/public', createPublicRouter({ fileService }));
   app.use(notFound);
   app.use(errorHandler);

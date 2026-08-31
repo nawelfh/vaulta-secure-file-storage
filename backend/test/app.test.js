@@ -39,9 +39,24 @@ function testApp() {
       expiresIn: 300,
     })),
   };
+  const storageStatsService = {
+    getForOwner: vi.fn(async () => ({
+      totalFiles: 3,
+      publicFiles: 1,
+      privateFiles: 2,
+      usedBytes: 1024,
+      quotaBytes: 1_073_741_824,
+      remainingBytes: 1_073_740_800,
+      percentageUsed: 0,
+    })),
+  };
   const pool = { query: vi.fn(async () => ({ rows: [] })) };
   const logger = pino({ level: 'silent' });
-  return { app: createApp({ config, authService, fileService, pool, logger }), fileService };
+  return {
+    app: createApp({ config, authService, fileService, storageStatsService, pool, logger }),
+    fileService,
+    storageStatsService,
+  };
 }
 
 const authCookies = ['session=valid-session', 'csrf=valid-csrf'];
@@ -60,6 +75,34 @@ describe('HTTP security boundaries', () => {
     const response = await request(app).get('/api/files').set('Cookie', authCookies);
     expect(response.status).toBe(200);
     expect(fileService.list).toHaveBeenCalledWith(expect.objectContaining({ ownerId: 'user-a' }));
+  });
+
+  it('rejects unauthenticated storage statistics requests', async () => {
+    const { app, storageStatsService } = testApp();
+    const response = await request(app).get('/api/storage/stats');
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe('AUTHENTICATION_REQUIRED');
+    expect(storageStatsService.getForOwner).not.toHaveBeenCalled();
+  });
+
+  it('returns owner-scoped storage statistics through a safe authenticated GET', async () => {
+    const { app, storageStatsService } = testApp();
+    const response = await request(app)
+      .get('/api/storage/stats')
+      .set('Cookie', ['session=valid-session']);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ stats: {
+      totalFiles: 3,
+      publicFiles: 1,
+      privateFiles: 2,
+      usedBytes: 1024,
+      quotaBytes: 1_073_741_824,
+      remainingBytes: 1_073_740_800,
+      percentageUsed: 0,
+    } });
+    expect(storageStatsService.getForOwner).toHaveBeenCalledWith('user-a');
   });
 
   it('requires a session-bound CSRF token for mutations', async () => {

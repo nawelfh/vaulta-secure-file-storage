@@ -8,6 +8,7 @@ servers:
 tags:
   - name: Authentication
   - name: Files
+  - name: Storage
   - name: Public
 paths:
   /api/auth/register:
@@ -273,6 +274,26 @@ paths:
                   expiresIn: { type: integer, example: 300 }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/storage/stats:
+    get:
+      tags: [Storage]
+      summary: Read the current owner's authoritative storage statistics
+      description: >-
+        Counts and sums every READY file owned by the authenticated user, independent of file-list
+        pagination. UPLOADING and REJECTED records are excluded. Byte fields use binary bytes. The
+        assessment-wide 1 GiB quota is reporting-only and is not an atomic upload reservation.
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: READY-file storage statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [stats]
+                properties:
+                  stats: { $ref: '#/components/schemas/StorageStats' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /api/public/{shareToken}:
     get:
       tags: [Public]
@@ -338,6 +359,47 @@ components:
         shareUrl: { type: [string, 'null'], format: uri }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    StorageStats:
+      type: object
+      additionalProperties: false
+      required:
+        - totalFiles
+        - publicFiles
+        - privateFiles
+        - usedBytes
+        - quotaBytes
+        - remainingBytes
+        - percentageUsed
+      properties:
+        totalFiles:
+          type: integer
+          minimum: 0
+          description: Total READY files owned by the authenticated user.
+        publicFiles:
+          type: integer
+          minimum: 0
+          description: READY files whose visibility is PUBLIC.
+        privateFiles:
+          type: integer
+          minimum: 0
+          description: READY files whose visibility is PRIVATE.
+        usedBytes:
+          type: integer
+          minimum: 0
+          description: Sum of size_bytes for the owner's READY files, in bytes.
+        quotaBytes:
+          type: integer
+          const: 1073741824
+          description: Assessment-wide reporting quota in bytes (1 GiB).
+        remainingBytes:
+          type: integer
+          minimum: 0
+          description: quotaBytes minus usedBytes, clamped to zero.
+        percentageUsed:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Usage percentage rounded to two decimal places and clamped to 100.
     Error:
       type: object
       required: [error]

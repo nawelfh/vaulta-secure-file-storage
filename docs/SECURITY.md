@@ -45,7 +45,7 @@ The application protects account credentials, session secrets, private file byte
 These are explicit extensions rather than hidden claims:
 
 1. Put new objects in a quarantine prefix and scan with antivirus or content-disarm/reconstruction before promotion. Magic bytes are useful validation, not malware detection.
-2. Enforce user quotas, per-user concurrent-upload limits, and stale-upload cleanup. Configure an S3 lifecycle rule to abort incomplete multipart uploads.
+2. Add atomic quota reservations and hard enforcement, per-user concurrent-upload limits, and stale-upload cleanup. Configure an S3 lifecycle rule to abort incomplete multipart uploads.
 3. Replace the in-process rate-limit store with Redis when running more than one API instance.
 4. Add verified email, password reset, suspicious-login monitoring, session management, and breach-password screening.
 5. Use workload identity/IAM roles, KMS-managed encryption, secret rotation, audit retention, backups, and tested restore procedures.
