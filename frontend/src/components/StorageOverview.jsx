@@ -1,4 +1,4 @@
-import { formatBytes } from '../utils/format.js';
+import { formatStorageSize } from '../utils/format.js';
 import { Icon } from './Icons.jsx';
 
 const STAT_CARDS = [
@@ -54,11 +54,11 @@ export function StorageOverview({ stats, loading, refreshing, error, onRetry }) 
           <div className="storage-ring" style={{ '--usage': `${stats.percentageUsed}%` }} role="img" aria-label={`${stats.percentageUsed}% of storage used`}>
             <span><strong>{stats.percentageUsed}%</strong><small>used</small></span>
           </div>
-          <p className="storage-usage"><strong>{formatBytes(stats.usedBytes)}</strong><span> of {formatBytes(stats.quotaBytes)} used</span></p>
+          <p className="storage-usage"><strong>{formatStorageSize(stats.usedBytes)}</strong><span> of {formatStorageSize(stats.quotaBytes)} used</span></p>
         </div>
         <div className="storage-progress-meta">
           <span>{stats.percentageUsed}% used</span>
-          <span>{formatBytes(stats.remainingBytes)} remaining</span>
+          <span>{formatStorageSize(stats.remainingBytes)} remaining</span>
         </div>
         <div
           className="storage-progress"
@@ -87,7 +87,7 @@ export function StorageOverview({ stats, loading, refreshing, error, onRetry }) 
             <span className={`stat-icon stat-icon-${card.style || card.icon}`}><Icon name={card.icon} /></span>
             <div>
               <span>{card.label}</span>
-              <strong>{card.bytes ? formatBytes(stats[card.key]) : stats[card.key].toLocaleString()}</strong>
+              <strong>{card.bytes ? formatStorageSize(stats[card.key]) : stats[card.key].toLocaleString()}</strong>
             </div>
           </article>
         ))}

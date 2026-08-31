@@ -4,7 +4,7 @@ import { apiFetch } from '../api/client.js';
 import { AppFooter } from '../components/AppFooter.jsx';
 import { Icon } from '../components/Icons.jsx';
 import { Logo } from '../components/Logo.jsx';
-import { formatBytes } from '../utils/format.js';
+import { formatFileSize } from '../utils/format.js';
 
 function isUnavailableError(error) {
   return error?.status === 404
@@ -112,7 +112,7 @@ export function SharePage() {
         <p>
           <strong>{share.originalName}</strong>
           <br />
-          {formatBytes(share.sizeBytes)}
+          {formatFileSize(share.sizeBytes)}
         </p>
         <p>
           Vaulta will create a temporary download authorization valid for {expiryMinutes} minutes.

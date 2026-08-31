@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { formatBytes } from '../utils/format.js';
+import { formatStorageSize } from '../utils/format.js';
 import { Icon } from './Icons.jsx';
 import { Logo } from './Logo.jsx';
 
@@ -49,8 +49,8 @@ export function DashboardSidebar({ activeView, open, stats, onClose, onNavigate,
           {stats && (
             <>
               <div className="sidebar-storage-meta">
-                <span>{formatBytes(stats.usedBytes)} used</span>
-                <span>{formatBytes(stats.remainingBytes)} left</span>
+                <span>{formatStorageSize(stats.usedBytes)} used</span>
+                <span>{formatStorageSize(stats.remainingBytes)} left</span>
               </div>
               <div
                 className="sidebar-storage-progress"

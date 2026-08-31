@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../api/client.js';
 import { filePresentation } from '../utils/file-policy.js';
-import { formatBytes, formatDate } from '../utils/format.js';
+import { formatDate, formatFileSize } from '../utils/format.js';
 import { FileTypeIcon, Icon } from './Icons.jsx';
 
 const BULK_CONCURRENCY = 2;
@@ -472,7 +472,7 @@ export function FileList({
                 <span className="file-type-cell" role="cell">
                   <span className={`file-type-badge file-${presentation.style}`}>{presentation.badge}</span>
                 </span>
-                <span className="file-size-cell" role="cell">{formatBytes(file.sizeBytes)}</span>
+                <span className="file-size-cell" role="cell">{formatFileSize(file.sizeBytes)}</span>
                 <span role="cell" className={`status status-${file.visibility.toLowerCase()}`}><Icon name={file.visibility === 'PUBLIC' ? 'globe' : 'lock'} />{file.visibility === 'PUBLIC' ? 'Public' : 'Private'}</span>
                 <time className="file-date-cell" role="cell" dateTime={view === 'trash' ? file.trashedAt : file.createdAt}>{formatDate(view === 'trash' ? file.trashedAt : file.createdAt)}</time>
                 <div className="file-actions" role="cell">

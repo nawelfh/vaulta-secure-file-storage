@@ -7,7 +7,7 @@ import {
   policyForFile,
   SUPPORTED_FORMAT_GUIDANCE,
 } from '../utils/file-policy.js';
-import { formatBytes } from '../utils/format.js';
+import { formatFileSize } from '../utils/format.js';
 import { FileTypeIcon, Icon } from './Icons.jsx';
 
 const FILE_UPLOAD_CONCURRENCY = 2;
@@ -94,7 +94,7 @@ function QueueItem({ item, onCancel, onRemove, onRetry }) {
       </span>
       <div className="queue-file-details">
         <strong title={item.file.name}>{item.file.name}</strong>
-        <span>{policy?.label || item.file.type || 'Unsupported file type'} · {formatBytes(item.file.size)}</span>
+        <span>{policy?.label || item.file.type || 'Unsupported file type'} · {formatFileSize(item.file.size)}</span>
       </div>
       <div className="queue-status" role="status" aria-live="polite">
         <strong>{statusCopy(item)}</strong>

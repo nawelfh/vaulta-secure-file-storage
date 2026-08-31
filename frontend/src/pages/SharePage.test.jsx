@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 describe('SharePage file metadata', () => {
-  it('uses the shared MB-minimum formatter for the public file size', async () => {
+  it('uses natural file units for the public file size', async () => {
     const token = 'a'.repeat(43);
     apiFetch.mockResolvedValue({
       originalName: 'screenshot.png',
@@ -51,6 +51,6 @@ describe('SharePage file metadata', () => {
     });
 
     expect(apiFetch).toHaveBeenCalledWith(`/api/public/${token}`);
-    expect(container.querySelector('.share-card').textContent).toContain('0.05 MB');
+    expect(container.querySelector('.share-card').textContent).toContain('54 KB');
   });
 });

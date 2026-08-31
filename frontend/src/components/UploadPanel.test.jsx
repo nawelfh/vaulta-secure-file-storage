@@ -184,14 +184,14 @@ describe('UploadPanel queue intake', () => {
     expect(container.textContent)
       .toContain('JPG, PNG, GIF, WebP, MP4, WebM, MOV, PDF, TXT or ZIP · up to 250 MiB');
     expect(container.querySelector('input').accept).toContain('.webm');
-    expect(queueItem('camera-video.mp4').textContent).toContain('MP4 video · <0.01 MB');
+    expect(queueItem('camera-video.mp4').textContent).toContain('MP4 video · 10 B');
     expect(queueItem('camera-video.mp4').querySelector('.file-video')).toBeTruthy();
   });
 
-  it('formats selected-file sizes in MB without exposing byte or KB units', () => {
+  it('formats selected-file sizes with natural file units', () => {
     select(file('screenshot.png', 'image/png', new Uint8Array(54 * 1024)));
 
-    expect(queueItem('screenshot.png').textContent).toContain('PNG image · 0.05 MB');
+    expect(queueItem('screenshot.png').textContent).toContain('PNG image · 54 KB');
   });
 
   it('lets a validation failure be removed without affecting a valid neighbor', () => {
