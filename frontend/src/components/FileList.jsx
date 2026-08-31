@@ -6,6 +6,8 @@ import { FileTypeIcon, Icon } from './Icons.jsx';
 
 const BULK_CONCURRENCY = 2;
 const EMPTY_SELECTION = new Set();
+const IMAGE_PREVIEW_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+const MAX_INLINE_PREVIEW_BYTES = 2 * 1024 * 1024;
 
 async function runBounded(items, worker) {
   const results = new Array(items.length);
@@ -41,6 +43,66 @@ export function FileIcon({ mimeType }) {
     <span className={`file-icon file-${presentation.style}`} role="img" aria-label={`${presentation.badge} file type`}>
       <FileTypeIcon style={presentation.style} />
       <small>{presentation.badge}</small>
+    </span>
+  );
+}
+
+function canLoadInlinePreview(file) {
+  return IMAGE_PREVIEW_TYPES.has(file.mimeType)
+    && Number.isSafeInteger(file.sizeBytes)
+    && file.sizeBytes > 0
+    && file.sizeBytes <= MAX_INLINE_PREVIEW_BYTES
+    && file.status === 'READY'
+    && !file.trashedAt;
+}
+
+export function FilePreview({ file }) {
+  const previewable = canLoadInlinePreview(file);
+  const previewKey = `${file.id}:${file.mimeType}:${file.sizeBytes}`;
+  const [preview, setPreview] = useState({ key: '', url: '', loaded: false, failed: false });
+
+  useEffect(() => {
+    if (!previewable) return undefined;
+    const controller = new AbortController();
+    let current = true;
+
+    apiFetch(`/api/files/${file.id}/download`, { signal: controller.signal })
+      .then((result) => {
+        if (!current) return;
+        if (typeof result?.url !== 'string' || !result.url) {
+          setPreview({ key: previewKey, url: '', loaded: false, failed: true });
+          return;
+        }
+        setPreview({ key: previewKey, url: result.url, loaded: false, failed: false });
+      })
+      .catch((error) => {
+        if (current && error?.name !== 'AbortError') {
+          setPreview({ key: previewKey, url: '', loaded: false, failed: true });
+        }
+      });
+
+    return () => {
+      current = false;
+      controller.abort();
+    };
+  }, [file.id, previewable, previewKey]);
+
+  const showImage = previewable && preview.key === previewKey && preview.url && !preview.failed;
+
+  return (
+    <span className="file-preview" data-preview-state={showImage && preview.loaded ? 'ready' : showImage ? 'loading' : 'fallback'}>
+      {(!showImage || !preview.loaded) && <FileIcon mimeType={file.mimeType} />}
+      {showImage && (
+        <img
+          className={preview.loaded ? 'is-loaded' : ''}
+          src={preview.url}
+          alt={`Preview of ${file.originalName}`}
+          loading="lazy"
+          decoding="async"
+          onLoad={() => setPreview((current) => ({ ...current, loaded: true }))}
+          onError={() => setPreview({ key: previewKey, url: '', loaded: false, failed: true })}
+        />
+      )}
     </span>
   );
 }
@@ -468,7 +530,7 @@ export function FileList({
                     onChange={() => toggleFileSelection(file.id)}
                   />
                 </span>
-                <div className="file-name-cell" role="cell"><FileIcon mimeType={file.mimeType} /><strong title={file.originalName}>{file.originalName}</strong></div>
+                <div className="file-name-cell" role="cell"><FilePreview file={file} /><strong title={file.originalName}>{file.originalName}</strong></div>
                 <span className="file-type-cell" role="cell">
                   <span className={`file-type-badge file-${presentation.style}`}>{presentation.badge}</span>
                 </span>

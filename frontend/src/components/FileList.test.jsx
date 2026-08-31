@@ -16,6 +16,13 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let container;
 let root;
 
+async function flush() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 beforeEach(() => {
   container = document.createElement('div');
   document.body.append(container);
@@ -131,6 +138,108 @@ describe('FileList professional table and pagination', () => {
     const type = container.querySelector('.file-type-cell').textContent.trim();
     expect(type).toBe('VID');
     expect(type).not.toBe('TXT');
+  });
+
+  it('loads a bounded image preview through the private owner-download route', async () => {
+    const imageFile = {
+      ...file,
+      originalName: 'family-photo.jpg',
+      mimeType: 'image/jpeg',
+      sizeBytes: 512 * 1024,
+      trashedAt: null,
+      shareUrl: 'https://vaulta.example/share/public-token-must-not-be-used',
+    };
+    apiFetch.mockResolvedValueOnce({ url: 'https://private-storage.example/signed-owner-preview' });
+
+    act(() => root.render(
+      <FileList
+        files={[imageFile]}
+        pagination={{ page: 1, limit: 5, total: 1, totalPages: 1, hasPrevious: false, hasNext: false }}
+        onPageChange={vi.fn()}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        {...common}
+      />,
+    ));
+    await flush();
+
+    expect(apiFetch).toHaveBeenCalledWith('/api/files/file-1/download', { signal: expect.any(AbortSignal) });
+    const preview = container.querySelector('.file-name-cell .file-preview');
+    const image = preview.querySelector('img');
+    expect(image.getAttribute('src')).toBe('https://private-storage.example/signed-owner-preview');
+    expect(image.getAttribute('src')).not.toContain('/share/');
+    expect(image.getAttribute('loading')).toBe('lazy');
+    expect(image.getAttribute('decoding')).toBe('async');
+    expect(preview.querySelector('.file-icon')).not.toBeNull();
+
+    act(() => image.dispatchEvent(new Event('load')));
+    expect(preview.dataset.previewState).toBe('ready');
+    expect(preview.querySelector('.file-icon')).toBeNull();
+    expect(container.querySelector('.file-type-cell').textContent.trim()).toBe('JPG');
+    expect(container.querySelector('[aria-label="Open actions for family-photo.jpg"]')).not.toBeNull();
+    expect(container.querySelector('.mobile-select-all')).not.toBeNull();
+  });
+
+  it('hides a failed image and restores the professional file-icon fallback', async () => {
+    apiFetch.mockResolvedValueOnce({ url: 'https://private-storage.example/broken-preview' });
+    act(() => root.render(
+      <FileList
+        files={[{ ...file, originalName: 'photo.png', mimeType: 'image/png', sizeBytes: 1024, trashedAt: null }]}
+        pagination={{ page: 1, limit: 5, total: 1, totalPages: 1, hasPrevious: false, hasNext: false }}
+        onPageChange={vi.fn()}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        {...common}
+      />,
+    ));
+    await flush();
+
+    const image = container.querySelector('.file-preview img');
+    act(() => image.dispatchEvent(new Event('error')));
+
+    expect(container.querySelector('.file-preview img')).toBeNull();
+    expect(container.querySelector('.file-preview').dataset.previewState).toBe('fallback');
+    expect(container.querySelector('.file-preview .file-img').textContent).toBe('PNG');
+  });
+
+  it.each([
+    ['application/pdf', 'file-pdf', 'PDF'],
+    ['text/plain', 'file-txt', 'TXT'],
+    ['application/zip', 'file-zip', 'ZIP'],
+    ['application/octet-stream', 'file-generic', 'FILE'],
+    ['video/mp4', 'file-video', 'MP4'],
+  ])('keeps %s on its aligned icon fallback without requesting preview bytes', (mimeType, className, badge) => {
+    act(() => root.render(
+      <FileList
+        files={[{ ...file, mimeType, trashedAt: null }]}
+        pagination={{ page: 1, limit: 5, total: 1, totalPages: 1, hasPrevious: false, hasNext: false }}
+        onPageChange={vi.fn()}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        {...common}
+      />,
+    ));
+
+    expect(container.querySelector(`.file-preview .${className}`).textContent).toBe(badge);
+    expect(container.querySelector('.file-preview img')).toBeNull();
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it('does not fetch a full original when an otherwise previewable image exceeds the bounded cap', () => {
+    act(() => root.render(
+      <FileList
+        files={[{ ...file, originalName: 'large.webp', mimeType: 'image/webp', sizeBytes: (2 * 1024 * 1024) + 1, trashedAt: null }]}
+        pagination={{ page: 1, limit: 5, total: 1, totalPages: 1, hasPrevious: false, hasNext: false }}
+        onPageChange={vi.fn()}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        {...common}
+      />,
+    ));
+
+    expect(container.querySelector('.file-preview .file-img').textContent).toBe('WEBP');
+    expect(container.querySelector('.file-preview img')).toBeNull();
+    expect(apiFetch).not.toHaveBeenCalled();
   });
 
   it('renders exact columns, authoritative range, current page, next, and direct page controls', () => {
