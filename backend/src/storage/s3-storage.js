@@ -10,9 +10,24 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-function contentDisposition(fileName) {
-  const asciiName = fileName.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
-  return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+function encodeRfc5987(value) {
+  return encodeURIComponent(value).replace(/['()*]/g, (character) => (
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  ));
+}
+
+export function contentDisposition(fileName) {
+  const withoutLineBreaks = String(fileName).replace(/[\r\n]/g, '');
+  const headerName = [...withoutLineBreaks].map((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint < 32 || codePoint === 127 ? '_' : character;
+  }).join('') || 'download';
+  const asciiName = headerName
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7e]/g, '_')
+    .replace(/["\\]/g, '_');
+  return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeRfc5987(headerName)}`;
 }
 
 export function createS3Storage(config) {

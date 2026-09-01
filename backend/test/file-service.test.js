@@ -98,10 +98,10 @@ function createHarness({ prefix = Buffer.from('%PDF-1.7') } = {}) {
   return { service: createFileService({ files, storage, config }), files, storage, records };
 }
 
-async function startPdf(harness) {
+async function startPdf(harness, originalName = 'report.pdf') {
   return harness.service.startUpload({
     ownerId: 'user-a',
-    metadata: { originalName: 'report.pdf', mimeType: 'application/pdf', sizeBytes: 15 },
+    metadata: { originalName, mimeType: 'application/pdf', sizeBytes: 15 },
   });
 }
 
@@ -224,6 +224,29 @@ describe('file service authorization and lifecycle', () => {
     expect(listed.items).toHaveLength(1);
     const download = await harness.service.getOwnerDownload({ ownerId: 'user-a', fileId: file.id });
     expect(download).toEqual({ url: 'https://storage.example/download', expiresIn: 300 });
+  });
+
+  it('uses the same original filename for owner and public download signing', async () => {
+    const harness = createHarness();
+    const originalName = 'Hamza_Affes_CV (1).pdf';
+    const { file } = await startPdf(harness, originalName);
+    await harness.service.completeUpload({
+      ownerId: 'user-a', fileId: file.id,
+      parts: [{ partNumber: 1, etag: 'a' }, { partNumber: 2, etag: 'b' }],
+    });
+
+    await harness.service.getOwnerDownload({ ownerId: 'user-a', fileId: file.id });
+    await harness.service.setVisibility({ ownerId: 'user-a', fileId: file.id, visibility: 'PUBLIC' });
+    await harness.service.getPublicDownload(harness.records.get(file.id).shareToken);
+
+    expect(harness.storage.signDownload).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      fileName: originalName,
+      key: harness.records.get(file.id).storageKey,
+    }));
+    expect(harness.storage.signDownload).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      fileName: originalName,
+      key: harness.records.get(file.id).storageKey,
+    }));
   });
 
   it('serializes authoritative page results without exposing storage metadata', async () => {
